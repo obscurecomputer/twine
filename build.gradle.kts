@@ -38,7 +38,7 @@ publishing {
 
     repositories {
 	maven {
-            name = "obscure repo"
+            name = "obscurerepo"
             url = uri("https://repo.obscure.computer/repository/maven-releases/")
             credentials {
                 username = findProperty("obscureUsername") as String? ?: System.getenv("OBSCURE_MAVEN_USER")
