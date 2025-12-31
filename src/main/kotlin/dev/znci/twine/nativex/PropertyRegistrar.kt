@@ -1,6 +1,7 @@
 package dev.znci.twine.nativex
 
 import dev.znci.twine.annotations.TwineNativeProperty
+import dev.znci.twine.nativex.conversion.ClassMapper.toClass
 import dev.znci.twine.nativex.conversion.Converter.toKotlinValue
 import dev.znci.twine.nativex.conversion.Converter.toLuaValue
 import org.luaj.vm2.LuaTable
@@ -52,7 +53,12 @@ class PropertyRegistrar(private val owner: TwineNative) {
 
                 return try {
                     val setterParamType = prop.setter.parameters[1].type
-                    val convertedValue = value.toKotlinValue(setterParamType)
+                    val convertedValue =
+                        if (value.istable())
+                            value.checktable().toClass(prop.setter)
+                        else
+                            value.toKotlinValue(setterParamType)
+
 
                     prop.setter.call(owner, convertedValue)
                     TRUE
@@ -83,6 +89,13 @@ class PropertyRegistrar(private val owner: TwineNative) {
                 return owner.table
             }
         })
+
+        val propertiesTable = LuaTable()
+
+        for ((name, _) in properties) {
+            propertiesTable.set(name, LuaValue.TRUE)
+        }
+        metatable.set("__properties", propertiesTable)
 
         owner.table.setmetatable(metatable)
     }
