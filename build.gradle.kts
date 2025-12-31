@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "dev.znci"
-version = "2.1.2"
+version = "2.1.2-b"
 
 repositories {
     mavenCentral()
