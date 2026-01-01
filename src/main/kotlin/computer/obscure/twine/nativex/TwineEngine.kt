@@ -60,6 +60,24 @@ class TwineEngine {
     }
 
     /**
+     * Works functionally the same as LuaJ's default `Globals#load(LuaValue)` function.
+     * Loads a [LuaValue] into the globals table.
+     *
+     * Example:
+     * ```
+     * engine.load(PackageLib())
+     * engine.load(Bit32Lib())
+     * engine.load(TableLib())
+     * engine.load(CoroutineLib())
+     * engine.load(JseMathLib())
+     * engine.load(LuajavaLib())
+     * ```
+     */
+    fun load(library: LuaValue) {
+        globals.load(library)
+    }
+
+    /**
      * Runs a script and returns the result.
      */
     fun run(name: String, content: String): LuaValue {
