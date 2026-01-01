@@ -3,8 +3,8 @@ plugins {
     kotlin("jvm") version "2.1.10"
 }
 
-group = "dev.znci"
-version = "2.1.2"
+group = "computer.obscure"
+version = "2.2.0"
 
 repositories {
     mavenCentral()
