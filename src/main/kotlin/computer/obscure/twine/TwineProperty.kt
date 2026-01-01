@@ -22,6 +22,7 @@ package computer.obscure.twine
  *
  * @param valueName The name of the property.
  */
+@Suppress("unused")
 open class TwineProperty(
     override var valueName: String = "",
 ) : TwineValueBase(valueName) {

@@ -32,6 +32,7 @@ import java.util.ArrayList
  * A wrapper class for `LuaValue` that provides additional functionality and type safety.
  * This class extends `LuaValue` and delegates method calls to the wrapped `luaValue` instance.
  */
+@Suppress("unused")
 open class TwineLuaValue(val luaValue: LuaValue = LuaValue.TRUE) : LuaValue() {
 
     /**
@@ -94,7 +95,6 @@ open class TwineLuaValue(val luaValue: LuaValue = LuaValue.TRUE) : LuaValue() {
                 }
                 else -> {
                     throw TwineError("Unsupported Lua type: ${value?.javaClass?.simpleName ?: "null"}")
-                    NIL
                 }
             }
         }
@@ -158,9 +158,7 @@ open class TwineLuaValue(val luaValue: LuaValue = LuaValue.TRUE) : LuaValue() {
      * This function iterates over each element in an array (`JsonArray`) and converts each value to a Lua value.
      * It also recursively scans any objects or other arrays.
      *
-     * @param key The name of the table key.
      * @param array The JSON array (`JsonArray`) to be converted.
-     * @param table The `TwineTable` in which the converted Lua value will be stored.
      *
      * This function processes different types of JSON elements within the array:
      * - For primitive types (string, number, boolean), it converts them to their Lua representations.
@@ -211,19 +209,15 @@ open class TwineLuaValue(val luaValue: LuaValue = LuaValue.TRUE) : LuaValue() {
             when {
                 primitive.isString -> {
                     table.setSimple(key, primitive.asString)
-                    "String"
                 }
                 primitive.isBoolean -> {
                     table.setSimple(key, primitive.asBoolean)
-                    "Boolean"
                 }
                 primitive.isNumber -> {
                     table.setSimple(key, primitive.asNumber.toDouble())
-                    "Number"
                 }
                 else -> {
                     table.setSimple(key, "Unknown")
-                    "Unknown"
                 }
             }
         } catch (e: Exception) {

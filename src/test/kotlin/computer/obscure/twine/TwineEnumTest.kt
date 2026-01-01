@@ -17,6 +17,7 @@ class TwineEnumTest {
      * with the name of the enum constant as the key, and its ordinal as the value.
      */
 
+    @Suppress("unused")
     private enum class SampleEnum {
         FIRST, SECOND, THIRD
     }

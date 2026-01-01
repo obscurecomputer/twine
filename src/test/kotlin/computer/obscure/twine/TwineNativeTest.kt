@@ -8,6 +8,7 @@ import org.luaj.vm2.Globals
 import org.luaj.vm2.lib.jse.JsePlatform
 import kotlin.test.assertEquals
 
+@Suppress("unused")
 class TwineNativeTestClass: TwineNative() {
     @TwineNativeFunction
     fun testVarargStr(vararg args: String): String {
@@ -15,7 +16,7 @@ class TwineNativeTestClass: TwineNative() {
     }
     @TwineNativeFunction
     fun testVarargDouble(vararg args: Double): Double {
-        return args.sumOf { it.toDouble() }
+        return args.sumOf { it }
     }
     @TwineNativeFunction
     fun testVarargBool(vararg args: Boolean): String {

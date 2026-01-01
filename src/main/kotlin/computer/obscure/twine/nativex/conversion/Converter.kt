@@ -170,7 +170,7 @@ object Converter {
         return when (this) {
             is String -> LuaValue.valueOf(this)
             is Boolean -> LuaValue.valueOf(this)
-            is Double -> LuaValue.valueOf(this.toDouble())
+            is Double -> LuaValue.valueOf(this)
             is Int -> LuaValue.valueOf(this)
             is Long -> LuaValue.valueOf(this.toInt())
             is Float -> LuaValue.valueOf(this.toDouble())
