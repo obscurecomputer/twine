@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dev.znci.twine
+package computer.obscure.twine
 
 import org.luaj.vm2.LuaTable
 import org.luaj.vm2.LuaValue

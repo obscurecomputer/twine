@@ -1,4 +1,4 @@
-package dev.znci.twine
+package computer.obscure.twine
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test

@@ -13,11 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dev.znci.twine.annotations
+package computer.obscure.twine.annotations
 
 /**
- * Annotation to mark a function as being able to be overloaded.
+ * Annotation to mark a property as a native property in the Twine framework.
+ * This allows the property to be exposed to Lua, making it accessible for manipulation from Lua scripts.
  */
-@Target(AnnotationTarget.FUNCTION)
+@Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class TwineOverload
+annotation class TwineNativeProperty(val name: String = "INHERIT_FROM_DEFINITION")

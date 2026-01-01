@@ -13,16 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dev.znci.twine.annotations
+package computer.obscure.twine.annotations
 
 /**
- * Annotation to mark a function as a native function in the Twine framework.
- * This allows functions to be registered as callable from Lua.
- *
- * @param name The name of the function when it is added to a LuaTable.
- *             If not specified, the default name is "INHERIT_FROM_DEFINITION",
- *             which inherits the function name.
+ * Annotation to mark a function as being able to be overloaded.
  */
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.RUNTIME)
-annotation class TwineNativeFunction(val name: String = "INHERIT_FROM_DEFINITION")
+annotation class TwineOverload

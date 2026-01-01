@@ -1,9 +1,9 @@
-package dev.znci.twine.nativex.conversion
+package computer.obscure.twine.nativex.conversion
 
-import dev.znci.twine.TwineEnum
-import dev.znci.twine.TwineError
-import dev.znci.twine.TwineTable
-import dev.znci.twine.nativex.conversion.Converter.toKotlinValue
+import computer.obscure.twine.TwineEnum
+import computer.obscure.twine.TwineError
+import computer.obscure.twine.TwineTable
+import computer.obscure.twine.nativex.conversion.Converter.toKotlinValue
 import org.luaj.vm2.LuaTable
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction

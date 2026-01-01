@@ -1,12 +1,12 @@
-package dev.znci.twine.nativex.conversion
+package computer.obscure.twine.nativex.conversion
 
-import dev.znci.twine.TableSetOptions
-import dev.znci.twine.TwineEnum
-import dev.znci.twine.TwineEnumValue
-import dev.znci.twine.TwineError
-import dev.znci.twine.TwineLuaValue
-import dev.znci.twine.TwineTable
-import dev.znci.twine.nativex.conversion.ClassMapper.toClass
+import computer.obscure.twine.TableSetOptions
+import computer.obscure.twine.TwineEnum
+import computer.obscure.twine.TwineEnumValue
+import computer.obscure.twine.TwineError
+import computer.obscure.twine.TwineLuaValue
+import computer.obscure.twine.TwineTable
+import computer.obscure.twine.nativex.conversion.ClassMapper.toClass
 import org.luaj.vm2.LuaBoolean
 import org.luaj.vm2.LuaInteger
 import org.luaj.vm2.LuaString

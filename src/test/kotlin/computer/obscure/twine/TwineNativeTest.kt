@@ -1,8 +1,8 @@
-package dev.znci.twine
+package computer.obscure.twine
 
-import dev.znci.twine.annotations.TwineNativeFunction
-import dev.znci.twine.nativex.TwineNative
-import dev.znci.twine.nativex.conversion.Converter.toLuaValue
+import computer.obscure.twine.annotations.TwineNativeFunction
+import computer.obscure.twine.nativex.TwineNative
+import computer.obscure.twine.nativex.conversion.Converter.toLuaValue
 import org.junit.jupiter.api.Test
 import org.luaj.vm2.Globals
 import org.luaj.vm2.lib.jse.JsePlatform
