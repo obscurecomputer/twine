@@ -1,6 +1,6 @@
-package dev.znci.twine.nativex
+package computer.obscure.twine.nativex
 
-import dev.znci.twine.TwineError
+import computer.obscure.twine.TwineError
 import org.luaj.vm2.LuaValue
 import kotlin.reflect.KFunction
 

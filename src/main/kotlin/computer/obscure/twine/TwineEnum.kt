@@ -1,7 +1,7 @@
-package dev.znci.twine
+package computer.obscure.twine
 
-import dev.znci.twine.annotations.TwineNativeProperty
-import dev.znci.twine.nativex.TwineNative
+import computer.obscure.twine.annotations.TwineNativeProperty
+import computer.obscure.twine.nativex.TwineNative
 import org.luaj.vm2.LuaTable
 import org.luaj.vm2.LuaValue
 import kotlin.reflect.KClass

@@ -1,4 +1,4 @@
-package dev.znci.twine
+package computer.obscure.twine
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
@@ -17,6 +17,7 @@ class TwineEnumTest {
      * with the name of the enum constant as the key, and its ordinal as the value.
      */
 
+    @Suppress("unused")
     private enum class SampleEnum {
         FIRST, SECOND, THIRD
     }

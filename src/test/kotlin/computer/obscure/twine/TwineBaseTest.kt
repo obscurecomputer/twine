@@ -1,9 +1,9 @@
-package dev.znci.twine
+package computer.obscure.twine
 
-import dev.znci.twine.annotations.TwineNativeFunction
-import dev.znci.twine.annotations.TwineNativeProperty
-import dev.znci.twine.nativex.TwineEngine
-import dev.znci.twine.nativex.TwineNative
+import computer.obscure.twine.annotations.TwineNativeFunction
+import computer.obscure.twine.annotations.TwineNativeProperty
+import computer.obscure.twine.nativex.TwineEngine
+import computer.obscure.twine.nativex.TwineNative
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 

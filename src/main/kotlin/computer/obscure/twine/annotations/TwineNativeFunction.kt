@@ -13,16 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dev.znci.twine
+package computer.obscure.twine.annotations
 
 /**
- * Base class for Twine API values, extending `TwineValue`.
- * This class provides a common structure for all Twine values, including a `valueName`
- * that identifies the value within the Twine API.
- * It serves as a superclass for other classes that represent values in the Twine API.
+ * Annotation to mark a function as a native function in the Twine framework.
+ * This allows functions to be registered as callable from Lua.
  *
- * @param valueName The name of the value, used for specifying the name of the value if it becomes a global.
+ * @param name The name of the function when it is added to a LuaTable.
+ *             If not specified, the default name is "INHERIT_FROM_DEFINITION",
+ *             which inherits the function name.
  */
-open class TwineValueBase(
-    open var valueName: String = ""
-): TwineLuaValue()
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class TwineNativeFunction(val name: String = "INHERIT_FROM_DEFINITION")

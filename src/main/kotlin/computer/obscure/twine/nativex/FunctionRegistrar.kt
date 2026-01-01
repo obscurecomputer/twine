@@ -1,11 +1,11 @@
-package dev.znci.twine.nativex
+package computer.obscure.twine.nativex
 
-import dev.znci.twine.TwineError
-import dev.znci.twine.annotations.TwineNativeFunction
-import dev.znci.twine.annotations.TwineOverload
-import dev.znci.twine.nativex.conversion.Converter.toKotlinArgs
-import dev.znci.twine.nativex.conversion.Converter.toKotlinType
-import dev.znci.twine.nativex.conversion.Converter.toLuaValue
+import computer.obscure.twine.TwineError
+import computer.obscure.twine.annotations.TwineNativeFunction
+import computer.obscure.twine.annotations.TwineOverload
+import computer.obscure.twine.nativex.conversion.Converter.toKotlinArgs
+import computer.obscure.twine.nativex.conversion.Converter.toKotlinType
+import computer.obscure.twine.nativex.conversion.Converter.toLuaValue
 import org.luaj.vm2.Varargs
 import org.luaj.vm2.lib.VarArgFunction
 import java.lang.reflect.InvocationTargetException

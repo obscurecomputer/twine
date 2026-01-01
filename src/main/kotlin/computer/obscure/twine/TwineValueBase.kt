@@ -13,6 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dev.znci.twine
+package computer.obscure.twine
 
-class TwineError(message: String) : Exception(message)
+/**
+ * Base class for Twine API values, extending `TwineValue`.
+ * This class provides a common structure for all Twine values, including a `valueName`
+ * that identifies the value within the Twine API.
+ * It serves as a superclass for other classes that represent values in the Twine API.
+ *
+ * @param valueName The name of the value, used for specifying the name of the value if it becomes a global.
+ */
+open class TwineValueBase(
+    open var valueName: String = ""
+): TwineLuaValue()

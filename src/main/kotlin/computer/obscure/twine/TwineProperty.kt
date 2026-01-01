@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dev.znci.twine
+package computer.obscure.twine
 
 /**
  * Represents a property in the Twine framework, extending the `TwineBase` class.
@@ -22,6 +22,7 @@ package dev.znci.twine
  *
  * @param valueName The name of the property.
  */
+@Suppress("unused")
 open class TwineProperty(
     override var valueName: String = "",
 ) : TwineValueBase(valueName) {

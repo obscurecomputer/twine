@@ -1,9 +1,9 @@
-package dev.znci.twine.nativex
+package computer.obscure.twine.nativex
 
-import dev.znci.twine.annotations.TwineNativeProperty
-import dev.znci.twine.nativex.conversion.ClassMapper.toClass
-import dev.znci.twine.nativex.conversion.Converter.toKotlinValue
-import dev.znci.twine.nativex.conversion.Converter.toLuaValue
+import computer.obscure.twine.annotations.TwineNativeProperty
+import computer.obscure.twine.nativex.conversion.ClassMapper.toClass
+import computer.obscure.twine.nativex.conversion.Converter.toKotlinValue
+import computer.obscure.twine.nativex.conversion.Converter.toLuaValue
 import org.luaj.vm2.LuaTable
 import org.luaj.vm2.LuaValue
 import org.luaj.vm2.lib.OneArgFunction

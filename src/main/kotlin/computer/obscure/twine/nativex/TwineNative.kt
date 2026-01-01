@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package dev.znci.twine.nativex
+package computer.obscure.twine.nativex
 
-import dev.znci.twine.TwineTable
+import computer.obscure.twine.TwineTable
 
 /**
  * Abstract class TwineNative serves as a bridge between Kotlin and Lua, allowing functions and properties
