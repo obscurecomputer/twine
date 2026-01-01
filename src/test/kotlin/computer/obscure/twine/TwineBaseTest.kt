@@ -30,7 +30,9 @@ class TwineBaseTest {
         val twineNative = TwineBaseTestClass()
         engine.setBase(twineNative)
 
-        return engine.run("test.lua", script)
+        return engine
+            .run("test.lua", script)
+            .getOrThrow()
     }
 
     @Test
