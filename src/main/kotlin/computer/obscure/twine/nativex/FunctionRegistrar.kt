@@ -15,7 +15,18 @@ import kotlin.reflect.full.functions
 import kotlin.reflect.full.isSupertypeOf
 
 class FunctionRegistrar(private val owner: TwineNative) {
-    val functions = owner::class.functions
+
+    companion object {
+        fun getFunctions(obj: Any): Map<String, KFunction<*>> {
+            return obj::class.functions
+                .mapNotNull { func ->
+                    func.findAnnotation<TwineNativeFunction>()?.let {annotation ->
+                        val customName = annotation.name.takeIf { it != TwineNative.INHERIT_TAG } ?: func.name
+                        customName to func
+                    }
+                }.toMap()
+        }
+    }
 
     fun register() {
         registerFunctions()
@@ -26,25 +37,19 @@ class FunctionRegistrar(private val owner: TwineNative) {
      * Registers functions annotated with {@code TwineNativeFunction} into the Lua table.
      */
     fun registerFunctions() {
+        val functions = getFunctions(owner)
         functions.forEach { function ->
-            if (function.findAnnotation<TwineNativeFunction>() == null)
-                return@forEach
+            val name = function.key
+            val rawFunction = function.value
 
-            // Set the name of the method based on the string given to the annotation
-            val annotation = function.findAnnotation<TwineNativeFunction>()
-            var annotatedFunctionName = annotation?.name ?: function.name
-
-            if (annotatedFunctionName == TwineNative.INHERIT_TAG)
-                annotatedFunctionName = function.name
-
-            owner.table.set(annotatedFunctionName, object : VarArgFunction() {
+            owner.table.set(name, object : VarArgFunction() {
                 override fun invoke(args: Varargs): Varargs {
                     return try {
-                        val kotlinArgs = args.toKotlinArgs(function)
-                        val result = function.call(owner, *kotlinArgs)
+                        val kotlinArgs = args.toKotlinArgs(rawFunction)
+                        val result = rawFunction.call(owner, *kotlinArgs)
                         result.toLuaValue()
                     } catch (e: InvocationTargetException) {
-                        ErrorHandler.throwError(e, function)
+                        ErrorHandler.throwError(e, rawFunction)
                     } as Varargs
                 }
             })
@@ -57,19 +62,16 @@ class FunctionRegistrar(private val owner: TwineNative) {
     fun registerOverloads() {
         val functionMap = mutableMapOf<String, MutableList<KFunction<*>>>()
 
+        val functions = getFunctions(owner)
         functions.forEach { function ->
-            val nativeAnnotation = function.findAnnotation<TwineNativeFunction>()
-            val overloadAnnotation = function.findAnnotation<TwineOverload>()
-            if (nativeAnnotation == null || overloadAnnotation == null)
-                return@forEach
+            val name = function.key
+            val rawFunction = function.value
 
-            // Set the name of the method based on the string given to the annotation
-            val annotation = function.findAnnotation<TwineNativeFunction>()
-            var annotatedFunctionName = annotation?.name ?: function.name
+            rawFunction.findAnnotation<TwineOverload>()
+                ?: return@forEach
 
-            if (annotatedFunctionName == TwineNative.INHERIT_TAG)
-                annotatedFunctionName = function.name
-            functionMap.computeIfAbsent(annotatedFunctionName) { mutableListOf() }.add(function)
+            functionMap.computeIfAbsent(name) {
+                mutableListOf() }.add(rawFunction)
         }
 
         // Find a match depending on the arg count and the arg types
