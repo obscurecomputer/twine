@@ -30,7 +30,7 @@ class TwineNativeTestClass: TwineNative() {
 
     @TwineNativeFunction
     fun testNew() {
-        println("new")
+
     }
 }
 
@@ -84,7 +84,6 @@ class TwineNativeTest {
             return test.testNew()
         """)
 
-        println(result)
 //        assertEquals("50", result.toString())
     }
 }

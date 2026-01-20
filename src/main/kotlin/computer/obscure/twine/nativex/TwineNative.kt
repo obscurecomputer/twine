@@ -16,6 +16,8 @@
 package computer.obscure.twine.nativex
 
 import computer.obscure.twine.TwineTable
+import computer.obscure.twine.nativex.classes.NativeProperty
+import org.luaj.vm2.Globals
 
 /**
  * Abstract class TwineNative serves as a bridge between Kotlin and Lua, allowing functions and properties
@@ -30,8 +32,11 @@ abstract class TwineNative(
     /** The name of the Lua table/property for this object. */
     override var valueName: String = ""
 ) : TwineTable(valueName) {
+    private var finalized = false
+    private var properties: Map<String, NativeProperty> = mutableMapOf()
+
     companion object {
-        val INHERIT_TAG = "INHERIT_FROM_DEFINITION"
+        const val INHERIT_TAG = "INHERIT_FROM_DEFINITION"
     }
 
     /**
@@ -40,8 +45,52 @@ abstract class TwineNative(
     init {
         val functionRegistrar = FunctionRegistrar(this)
         functionRegistrar.register()
+    }
+
+    /**
+     * Runs immediately after the native is registered in a [TwineEngine].
+     */
+    internal fun __finalizeNative() {
+        if (finalized) return
+        finalized = true
 
         val propertyRegistrar = PropertyRegistrar(this)
-        propertyRegistrar.registerProperties()
+        properties = PropertyRegistrar.getProperties(this)
+        propertyRegistrar.registerProperties(properties)
     }
+
+    protected fun requireFinalized() {
+        check(finalized) {
+            "TwineNative '$valueName' used before being registered with TwineEngine!"
+        }
+    }
+
+    fun toCodeBlock(globals: Globals): String {
+        requireFinalized()
+
+        val props = properties
+        val sb = StringBuilder()
+
+        for ((name, prop) in props) {
+            val currentValue = prop.getter.call(this)
+            val defaultValue = prop.defaultValue
+
+            println("${prop.name}: $defaultValue -> $currentValue")
+
+            if (currentValue != defaultValue) {
+                sb.append("$valueName.$name = ${serializeLua(currentValue, globals)}\n")
+            }
+        }
+
+        return sb.toString().trimEnd()
+    }
+
+    fun serializeLua(value: Any?, globals: Globals): String = when (value) {
+        null -> "nil"
+        is Boolean, is Int, is Long, is Float, is Double -> value.toString()
+        is String -> "\"${value.replace("\"", "\\\"")}\""
+        is TwineNative -> value.toCodeBlock(globals)
+        else -> error("Unsupported Lua value: ${value::class}")
+    } as String
+
 }

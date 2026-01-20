@@ -73,6 +73,7 @@ class TwineEngine {
      * Adds a [TwineNative] into the globals using its [TwineNative.valueName].
      */
     fun set(native: TwineNative) {
+        native.__finalizeNative()
         globals.set(native.valueName, native.table)
     }
 

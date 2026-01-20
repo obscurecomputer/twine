@@ -9,9 +9,6 @@ class TwineErrorTest {
     fun run(script: String): Any {
         val engine = TwineEngine()
 
-        val twineNative = TwineBaseTestClass()
-        engine.setBase(twineNative)
-
         return engine
             .run("test.lua", script)
             .getOrThrow()
@@ -24,7 +21,7 @@ class TwineErrorTest {
         }
 
         assertEquals(
-            "Lua error in test.lua:1 – attempted to index a nil value",
+            "Lua error in test.lua:1 — attempted to index a nil value",
             exception.message
         )
     }
