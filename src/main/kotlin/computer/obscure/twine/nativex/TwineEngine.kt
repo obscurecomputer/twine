@@ -9,11 +9,14 @@ class TwineEngine {
     private var _globals: Globals = JsePlatform.standardGlobals()
     val globals: Globals get() = _globals
 
+    /**
+     * A regex list containing replacements for traditional LuaJ error messages.
+     */
     val errorHandlers: List<Pair<Regex, (MatchResult, String, String) -> String>> = listOf(
         // "attempt to index ?" errors
         Regex("""attempt to index \? \(a nil value\)""") to { _, scriptName, rawMessage ->
             val line = rawMessage.substringAfter(":").substringBefore(" ")
-            "Lua error in $scriptName:$line – attempted to index a nil value"
+            "Lua error in $scriptName:$line — attempted to index a nil value"
         },
     )
 
