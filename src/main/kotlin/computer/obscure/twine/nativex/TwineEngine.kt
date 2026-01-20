@@ -9,6 +9,14 @@ class TwineEngine {
     private var _globals: Globals = JsePlatform.standardGlobals()
     val globals: Globals get() = _globals
 
+    val errorHandlers: List<Pair<Regex, (MatchResult, String, String) -> String>> = listOf(
+        // "attempt to index ?" errors
+        Regex("""attempt to index \? \(a nil value\)""") to { _, scriptName, rawMessage ->
+            val line = rawMessage.substringAfter(":").substringBefore(" ")
+            "Lua error in $scriptName:$line – attempted to index a nil value"
+        },
+    )
+
     /**
      * Wipes the globals using a given [Globals] instance.
      *
@@ -176,7 +184,15 @@ class TwineEngine {
         return try {
             Result.success(runUnsafe(name, content))
         } catch (e: Exception) {
-            Result.failure(e)
+            val rawMessage = e.message ?: "Unknown LuaError"
+
+            val newMessage = errorHandlers.firstOrNull { (regex, _) ->
+                regex.containsMatchIn(rawMessage)
+            }?.let { (regex, handler) ->
+                handler(regex.find(rawMessage)!!, name, rawMessage)
+            } ?: rawMessage
+
+            Result.failure(TwineError(newMessage))
         }
     }
 
