@@ -87,7 +87,6 @@ open class TwineLuaValue(val luaValue: LuaValue = LuaValue.TRUE) : LuaValue() {
                     val table = TwineTable("")
 
                     value.forEachIndexed { index, item ->
-                        println("$index $item")
                         table.setSimple((index + 1).toString(), valueOf(item))
                     }
 

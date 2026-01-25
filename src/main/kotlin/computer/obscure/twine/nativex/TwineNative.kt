@@ -16,6 +16,7 @@
 package computer.obscure.twine.nativex
 
 import computer.obscure.twine.TwineTable
+import computer.obscure.twine.nativex.classes.NativeProperty
 
 /**
  * Abstract class TwineNative serves as a bridge between Kotlin and Lua, allowing functions and properties
@@ -30,6 +31,7 @@ abstract class TwineNative(
     /** The name of the Lua table/property for this object. */
     override var valueName: String = ""
 ) : TwineTable(valueName) {
+    private var properties: Map<String, NativeProperty> = mutableMapOf()
     companion object {
         val INHERIT_TAG = "INHERIT_FROM_DEFINITION"
     }
@@ -42,6 +44,7 @@ abstract class TwineNative(
         functionRegistrar.register()
 
         val propertyRegistrar = PropertyRegistrar(this)
-        propertyRegistrar.registerProperties()
+        properties = PropertyRegistrar.getProperties(this)
+        propertyRegistrar.registerProperties(properties)
     }
 }

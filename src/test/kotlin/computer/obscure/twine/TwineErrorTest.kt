@@ -24,7 +24,7 @@ class TwineErrorTest {
         }
 
         assertEquals(
-            "Lua error in test.lua:1 – attempted to index a nil value",
+            "Lua error in test.lua:1 — attempted to index a nil value",
             exception.message
         )
     }

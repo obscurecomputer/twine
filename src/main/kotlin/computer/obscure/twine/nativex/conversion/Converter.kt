@@ -21,14 +21,25 @@ import kotlin.reflect.KTypeProjection
 import kotlin.reflect.full.createType
 
 object Converter {
+    fun KFunction<*>.getSignature(): String {
+        val params = parameters.drop(1).joinToString(", ") { param ->
+            val name = param.name ?: "arg"
+            val type = param.type.toString().substringAfterLast(".")
+            if (param.isVararg) "vararg $name: $type" else "$name: $type"
+        }
+        val returnType = returnType.toString().substringAfterLast(".")
+        return "$name($params): $returnType"
+    }
+
     /**
      * Converts Lua arguments to Kotlin arguments based on function parameter types.
      *
      * @param func The function whose parameters should be converted.
      * @return An array of Kotlin compatible arguments.
      */
-    fun Varargs.toKotlinArgs(func: KFunction<*>): Array<Any?> {
+    fun Varargs.toKotlinArgs(func: KFunction<*>, isColonCall: Boolean = false): Array<Any?> {
         val params = func.parameters.drop(1) // Skip `this`
+        val luaArgOffset = if (isColonCall) 1 else 0
 
         val lastParam = params.lastOrNull()
         val isVararg = lastParam?.isVararg == true
@@ -73,12 +84,13 @@ object Converter {
         }
 
         return params.mapIndexed { index, param ->
-            this.arg(index + 1).let { arg ->
-                if (arg.istable()) {
-                    arg.checktable().toClass(func)
-                } else {
-                    arg.toKotlinValue(param.type)
-                }
+            this.arg(index + 1 + luaArgOffset).let { arg ->
+                arg as? TwineTable
+                    ?: if (arg.istable()) {
+                        arg.checktable().toClass(func)
+                    } else {
+                        arg.toKotlinValue(param.type)
+                    }
             }
         }.toTypedArray()
     }
@@ -93,6 +105,17 @@ object Converter {
         if (isnil()) return null
         val classifier = type?.classifier as? KClass<*>
 
+        if (classifier != null && classifier.isInstance(this)) {
+            return this
+        }
+
+        if (isuserdata()) {
+            val obj = this.touserdata()
+            if (classifier != null && classifier.isInstance(obj)) {
+                return obj
+            }
+        }
+
         val converters: Map<KClass<*>, () -> Any?> = mapOf(
             String::class to { if (isnil()) null else tojstring() },
             Boolean::class to { toboolean() },
@@ -102,7 +125,7 @@ object Converter {
             Long::class to { tolong() }
         )
 
-        if (isfunction()) {
+        if (isfunction() && classifier?.java?.name?.startsWith("kotlin.jvm.functions.Function") == true) {
             val luaFunc = this.checkfunction()
             return when (classifier) {
                 Function0::class -> {
@@ -177,6 +200,7 @@ object Converter {
             is LuaString -> LuaValue.valueOf(this.toString())
             is LuaInteger -> LuaValue.valueOf(this.toint())
             is LuaBoolean -> LuaValue.valueOf(this.toboolean())
+            is LuaTable -> this
             is TwineTable -> {
                 val table = this.table
                 set("__javaClass", TableSetOptions(getter = { LuaValue.valueOf(javaClass.name) }))
@@ -224,20 +248,28 @@ object Converter {
     fun LuaValue.toKotlinType(): KType {
         return when {
             isboolean() -> Boolean::class.createType()
-            isnumber() -> Double::class.createType()
             isint() -> Int::class.createType()
+            isnumber() -> Double::class.createType()
             isstring() -> String::class.createType()
+            isuserdata() -> {
+                val obj = this.touserdata()
+                obj::class.createType()
+            }
             isfunction() -> {
                 Function::class.createType(listOf(KTypeProjection.STAR))
             }
             istable() -> {
-                try {
-                    val table = checktable()
-                    val className = table.get("__javaClass").tojstring()
-                    val clazz = Class.forName(className).kotlin
-                    clazz.createType()
-                } catch (e: ClassNotFoundException) {
-                    throw TwineError("Could not find class for Lua table: ${e.message}")
+                val table = checktable()
+                val className = table.get("__javaClass").optjstring(null)
+                if (className != null) {
+                    try {
+                        val clazz = Class.forName(className).kotlin
+                        clazz.createType()
+                    } catch (_: Exception) {
+                        table::class.createType()
+                    }
+                } else {
+                    table::class.createType()
                 }
             }
 

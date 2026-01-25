@@ -124,12 +124,13 @@ class TwineEngine {
             globals.set(luaValue.toString(), native.table.get(luaValue))
         }
 
+        val name = native.valueName.ifEmpty { "TwineNative" }
         // properties
         val metatable = native.table.getmetatable()?.checktable()
-            ?: throw TwineError("No metatable found on ${native.valueName}!")
+            ?: throw TwineError("No metatable found on ${name}!")
 
         val properties = metatable.get("__properties")?.checktable()
-            ?: throw TwineError("No __properties found on metatable of ${native.valueName}!")
+            ?: throw TwineError("No __properties found on metatable of ${name}!")
 
         properties.keys().forEach { luaValue ->
             globals.set(luaValue.toString(), native.table.get(luaValue))
