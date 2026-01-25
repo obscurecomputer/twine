@@ -19,6 +19,12 @@ import kotlin.reflect.full.isSupertypeOf
 class FunctionRegistrar(private val owner: TwineNative) {
 
     companion object {
+        /**
+         * Returns a Pair List of all the functions on this class.
+         * Returns a List instead of a Map to allow for duplicate functions (overloads).
+         *
+         * No longer returns a Map as of commit [ed255ce](https://github.com/obscurecomputer/twine/commit/ed255cee96e4fcaccaad0910c4c1879fa9fc1a5a).
+         */
         fun getFunctions(obj: Any): List<Pair<String, KFunction<*>>> {
             return obj::class.functions
                 .mapNotNull { func ->
@@ -26,10 +32,13 @@ class FunctionRegistrar(private val owner: TwineNative) {
                         val customName = annotation.name.takeIf { it != TwineNative.INHERIT_TAG } ?: func.name
                         customName to func
                     }
-                } // Removed .toMap()
+                }
         }
     }
 
+    /**
+     * Registers all simple/overload functions.
+     */
     fun register() {
         val allFunctions = getFunctions(owner)
         val grouped = allFunctions.groupBy({ it.first }, { it.second })
@@ -62,6 +71,14 @@ class FunctionRegistrar(private val owner: TwineNative) {
         })
     }
 
+    /**
+     * Generic result handler.
+     * Processes the return value of a Kotlin function call and converts it to a
+     * LuaJ VM compatible format.
+     *
+     * This handler specifically checks if the result is an instance of the [owner].
+     * If not, it is converted using [toLuaValue].
+     */
     private fun handleResult(result: Any?): Varargs {
         return if (result == owner || result?.javaClass == owner.javaClass) {
             owner.table
