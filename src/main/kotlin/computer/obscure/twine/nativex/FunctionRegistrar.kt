@@ -80,7 +80,7 @@ class FunctionRegistrar(private val owner: TwineNative) {
      * If not, it is converted using [toLuaValue].
      */
     private fun handleResult(result: Any?): Varargs {
-        return if (result == owner || result?.javaClass == owner.javaClass) {
+        return if (result === owner) {
             owner.table
         } else {
             result.toLuaValue()
@@ -149,7 +149,18 @@ class FunctionRegistrar(private val owner: TwineNative) {
                     } as Varargs
                 }
 
-                throw TwineError("No matching overload found for '$name' with $argCount arguments.")
+                val passedArgs = (1..argCount).joinToString(", ") { i ->
+                    val luaValue = args.arg(i)
+                    luaValue.toKotlinType().toString().substringAfterLast(".")
+                }
+                val attempt = "$name($passedArgs)"
+
+                val options = overloadedFunctions.joinToString("\n") { " - ${it.getSignature()}" }
+
+                throw TwineError(
+                    "No matching overload found for: $attempt\n" +
+                            "Available overloads for \"$name\":\n$options"
+                )
             }
         })
     }
