@@ -6,6 +6,7 @@ import computer.obscure.twine.annotations.TwineOverload
 import computer.obscure.twine.nativex.TwineEngine
 import computer.obscure.twine.nativex.TwineNative
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
 
 
@@ -47,7 +48,6 @@ class TwineOverloadTest {
 
         engine.set(TwineOverloadTestClass())
 
-        TwineLogger.level = TwineLogger.DEBUG
         return engine
             .run("test.lua", script)
             .getOrThrow()
@@ -72,5 +72,17 @@ class TwineOverloadTest {
         val result = run("return class1.test(class1.class2()).works").toString()
 
         assertEquals(true, result.toBoolean())
+    }
+
+    @Test
+    fun `test should throw an error when no matching overload`() {
+        val result = assertThrows<TwineError> {
+            run("return class1.test(false)")
+        }
+
+        assertEquals(
+            true,
+            result.message?.startsWith("No matching overload found")
+        )
     }
 }

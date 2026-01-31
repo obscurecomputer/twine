@@ -42,7 +42,8 @@ class PropertyRegistrar(private val owner: TwineNative) {
                         name = name,
                         getter = getter,
                         setter = setter,
-                        defaultValue = defaultValue
+                        defaultValue = defaultValue,
+                        type = prop.returnType
                     )
                 }
                 .toMap()

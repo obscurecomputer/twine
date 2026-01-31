@@ -4,8 +4,10 @@ import computer.obscure.twine.TableSetOptions
 import computer.obscure.twine.TwineEnum
 import computer.obscure.twine.TwineEnumValue
 import computer.obscure.twine.TwineError
+import computer.obscure.twine.TwineLogger
 import computer.obscure.twine.TwineLuaValue
 import computer.obscure.twine.TwineTable
+import computer.obscure.twine.nativex.TwineNative
 import computer.obscure.twine.nativex.conversion.ClassMapper.toClass
 import org.luaj.vm2.LuaBoolean
 import org.luaj.vm2.LuaInteger
@@ -54,23 +56,35 @@ object Converter {
         }
 
         if (lastParam?.isVararg == true) {
-            val firstArg = this.arg(1)
-            val firstArgType = firstArg.toKotlinType()
-            val count = narg()
+            val count = narg() - luaArgOffset
+            val varargKType = lastParam.type
+            val varargClassifier = varargKType.classifier as? KClass<*>
 
-            val firstArgArray: Any = when (firstArgType.classifier) {
-                Int::class -> List(count) { this.arg(it + 1).toint() }.toIntArray().toTypedArray()
-                Double::class -> List(count) { this.arg(it + 1).todouble() }.toDoubleArray()
-                Boolean::class -> List(count) { this.arg(it + 1).toboolean() }.toBooleanArray()
-                Float::class -> List(count) { this.arg(it + 1).tofloat() }.toFloatArray()
-                Long::class -> List(count) { this.arg(it + 1).tolong() }.toLongArray()
-                String::class -> Array(count) { this.arg(it + 1).tojstring() }
-                LuaValue::class -> Array(count) { this.arg(it + 1) }
+            val varargArray: Any = when (varargClassifier) {
+                DoubleArray::class -> DoubleArray(count) { this.arg(it + 1 + luaArgOffset).todouble() }
+                IntArray::class -> IntArray(count) { this.arg(it + 1 + luaArgOffset).toint() }
+                BooleanArray::class -> BooleanArray(count) { this.arg(it + 1 + luaArgOffset).toboolean() }
+                LongArray::class -> LongArray(count) { this.arg(it + 1 + luaArgOffset).tolong() }
+                FloatArray::class -> FloatArray(count) { this.arg(it + 1 + luaArgOffset).tofloat() }
 
-                else -> throw TwineError("Unsupported vararg type: $firstArgType")
+                // object arrays (strings, TwineNatives, etc.) fall under here
+                // ones that do not have kotlin equivalents
+                else -> {
+                    val componentKType = varargKType.arguments.firstOrNull()?.type
+                    val componentClass = (componentKType?.classifier as? KClass<*>)?.java
+                        ?: Any::class.java
+
+                    val typedArray = java.lang.reflect.Array.newInstance(componentClass, count)
+
+                    for (i in 0 until count) {
+                        val value = this.arg(i + 1 + luaArgOffset).toKotlinValue(componentKType)
+                        java.lang.reflect.Array.set(typedArray, i, value)
+                    }
+                    typedArray
+                }
             }
 
-            return arrayOf(firstArgArray)
+            return arrayOf(varargArray)
         }
 
         if (isVararg) {
@@ -85,12 +99,28 @@ object Converter {
 
         return params.mapIndexed { index, param ->
             this.arg(index + 1 + luaArgOffset).let { arg ->
-                arg as? TwineTable
-                    ?: if (arg.istable()) {
-                        arg.checktable().toClass(func)
-                    } else {
+                TwineLogger.debug("Converting arg $index for param ${param.name} (type: ${param.type})")
+                TwineLogger.debug("Lua value type: ${arg.typename()}, istable: ${arg.istable()}")
+
+                when {
+                    arg is TwineTable -> arg
+                    arg.istable() -> {
+                        val table = arg.checktable()
+                        val metatable = table.getmetatable()
+
+                        if (metatable != null && !metatable.get("__twine_native").isnil()) {
+                            TwineLogger.debug("Found __twine_native, getting userdata")
+                            metatable.get("__twine_native").checkuserdata()
+                        } else {
+                            TwineLogger.debug("Calling toClass for table")
+                            table.toClass(func)
+                        }
+                    }
+                    else -> {
+                        TwineLogger.debug("Calling toKotlinValue")
                         arg.toKotlinValue(param.type)
                     }
+                }
             }
         }.toTypedArray()
     }
@@ -201,6 +231,14 @@ object Converter {
             is LuaInteger -> LuaValue.valueOf(this.toint())
             is LuaBoolean -> LuaValue.valueOf(this.toboolean())
             is LuaTable -> this
+            is TwineNative -> {
+                this.set("__javaClass", TableSetOptions(getter = { LuaValue.valueOf(this.javaClass.name) }))
+
+                val metatable = table.getmetatable() ?: LuaTable()
+                metatable.set("__twine_native", LuaValue.userdataOf(this))
+                table.setmetatable(metatable)
+                table
+            }
             is TwineTable -> {
                 val table = this.table
                 set("__javaClass", TableSetOptions(getter = { LuaValue.valueOf(javaClass.name) }))

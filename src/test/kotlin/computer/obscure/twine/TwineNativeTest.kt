@@ -27,11 +27,6 @@ class TwineNativeTestClass: TwineNative() {
     fun testCallback(time: Long, callback: (time: Long) -> String): String {
         return callback(time).toLuaValue().toString()
     }
-
-    @TwineNativeFunction
-    fun testNew() {
-        println("new")
-    }
 }
 
 class TwineNativeTest {
@@ -57,7 +52,7 @@ class TwineNativeTest {
     fun `testVarargDouble should print the sum of all arguments`() {
         val result = run("return test.testVarargDouble(1, 2, 3)")
 
-        assertEquals(6, result.toString().toInt())
+        assertEquals(6.0, result.toString().toDouble())
     }
 
     @Test
@@ -76,15 +71,5 @@ class TwineNativeTest {
         """)
 
         assertEquals("50", result.toString())
-    }
-
-    @Test
-    fun `testNew should create a new test object`() {
-        val result = run("""
-            return test.testNew()
-        """)
-
-        println(result)
-//        assertEquals("50", result.toString())
     }
 }
