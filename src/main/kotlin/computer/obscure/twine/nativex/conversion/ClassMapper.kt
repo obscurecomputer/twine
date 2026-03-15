@@ -55,7 +55,8 @@ object ClassMapper {
                     value.toKotlinValue(param.type)
                 }.toTypedArray()
 
-                return constructor.call(*args) as TwineTable
+                val instance = constructor.call(*args)
+                return instance
             }
         } catch (e: Exception) {
             throw e

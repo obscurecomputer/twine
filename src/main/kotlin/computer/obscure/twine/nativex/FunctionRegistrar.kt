@@ -109,14 +109,20 @@ class FunctionRegistrar(private val owner: TwineNative) {
                         val luaValue = args.arg(i + 1)
                         val argType = luaValue.toKotlinType()
 
-                        TwineLogger.debug("Attempting to match arg $paramType/$argType to ${function.getSignature()}")
-
-                        if (paramType == argType) {
-                            TwineLogger.debug("Matched $paramType/$argType to ${function.getSignature()}")
+                        if (paramType == argType || paramType.isSupertypeOf(argType)) {
                             continue
                         }
-                        if (paramType.isSupertypeOf(argType)) {
-                            TwineLogger.debug("Matched $argType as subtype of $paramType")
+
+                        val paramClass = paramType.classifier
+                        val argClass = argType.classifier
+
+                        val isNumericParam = paramClass == Double::class || paramClass == Float::class ||
+                                paramClass == Int::class || paramClass == Long::class
+                        val isNumericArg = argClass == Double::class || argClass == Float::class ||
+                                argClass == Int::class || argClass == Long::class
+
+                        if (isNumericParam && isNumericArg) {
+                            TwineLogger.debug("Number conversion allowed: $argType to $paramType")
                             continue
                         }
 
