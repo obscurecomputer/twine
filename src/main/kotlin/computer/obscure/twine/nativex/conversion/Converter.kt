@@ -15,6 +15,9 @@ import org.luaj.vm2.LuaString
 import org.luaj.vm2.LuaTable
 import org.luaj.vm2.LuaValue
 import org.luaj.vm2.Varargs
+import java.util.Optional
+import kotlin.collections.component1
+import kotlin.collections.component2
 import kotlin.collections.get
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
@@ -247,6 +250,13 @@ object Converter {
             is TwineLuaValue -> {
                 throw TwineError("TwineLuaValue should not be used as a return type.")
             }
+            is Map<*, *> -> {
+                val table = LuaTable()
+                this.forEach { (k, v) ->
+                    table[k.toLuaValue()] = v.toLuaValue()
+                }
+                table
+            }
             is Array<*> -> {
                 val table = LuaTable()
                 this.forEachIndexed { index, value ->
@@ -272,6 +282,9 @@ object Converter {
                 val enumClass = this::class
                 val enumTable = TwineEnum(enumClass)
                 enumTable.toLuaTable()
+            }
+            is Optional<*> -> {
+                orElse(null).toLuaValue()
             }
             null, Unit -> TwineLuaValue.NIL
             else -> {
