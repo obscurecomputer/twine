@@ -9,13 +9,10 @@
 ## Usage
 ```kt
 repositories {
-    maven("https://jitpack.io")
+    maven("https://repo.obscure.computer/repository/maven-releases/")
 }
 dependencies {
-    /* example:
-    implementation("com.github.znci:twine:3a5f69f7b1")
-    */
-    implementation("com.github.znci:twine:{LATEST_COMMIT}") // (first 10 characters of commit hash)
+    implementation("com.github.znci:twine:2.3.4")
 }
 ```
 
