@@ -37,7 +37,7 @@ object ClassMapper {
             val clazz = try {
                 Class.forName(className).kotlin
             } catch (_: ClassNotFoundException) {
-                throw TwineError("Could not find class '$className'. Did you forget to set __javaClass?")
+                throw TwineError("Could not find class '$className'. __javaClass is not set!")
             }
 
             // if enum class

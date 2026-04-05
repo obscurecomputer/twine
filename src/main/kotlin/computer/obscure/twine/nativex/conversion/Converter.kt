@@ -108,15 +108,29 @@ object Converter {
                 when {
                     arg is TwineTable -> arg
                     arg.istable() -> {
+                        val classifier = param.type.classifier as? KClass<*>
                         val table = arg.checktable()
                         val metatable = table.getmetatable()
 
-                        if (metatable != null && !metatable.get("__twine_native").isnil()) {
-                            TwineLogger.debug("Found __twine_native, getting userdata")
-                            metatable.get("__twine_native").checkuserdata()
-                        } else {
-                            TwineLogger.debug("Calling toClass for table")
-                            table.toClass(func)
+                        val isRawLuaType = classifier != null && (
+                                classifier == LuaValue::class ||
+                                        classifier == LuaTable::class ||
+                                        classifier == Any::class
+                                )
+
+                        when {
+                            isRawLuaType -> {
+                                TwineLogger.debug("Param expects raw LuaValue/LuaTable, skipping class mapping")
+                                arg
+                            }
+                            metatable != null && !metatable.get("__twine_native").isnil() -> {
+                                TwineLogger.debug("Found __twine_native, getting userdata")
+                                metatable.get("__twine_native").checkuserdata()
+                            }
+                            else -> {
+                                TwineLogger.debug("Calling toClass for table (converting to ${func.javaClass.name})")
+                                table.toClass(func)
+                            }
                         }
                     }
                     else -> {
