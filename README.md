@@ -12,7 +12,7 @@ repositories {
     maven("https://repo.obscure.computer/repository/maven-releases/")
 }
 dependencies {
-    implementation("com.github.znci:twine:2.3.4")
+    implementation("computer.obscure:twine:2.3.4")
 }
 ```
 
