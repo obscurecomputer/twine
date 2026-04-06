@@ -208,6 +208,6 @@ class TwinePropertyTest {
             fun test(): String = "i am a function"
         })
         engine.run("capture.record(tostring(type(t.test)))")
-        assertEquals(listOf("function"), output)
+        assertEquals(listOf("table"), output)
     }
 }

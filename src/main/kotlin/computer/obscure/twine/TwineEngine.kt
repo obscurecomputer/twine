@@ -6,6 +6,7 @@ import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
 import net.hollowcube.luau.compiler.OptimizationLevel
 import java.lang.ref.WeakReference
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
@@ -21,6 +22,7 @@ class TwineEngine {
     var closed = false
         private set
     val stateLock = Any()
+    private val nativeFuncCache: MutableMap<String, LuaFunc> = ConcurrentHashMap()
 
     val state: LuaState = LuaState.newState()
 
@@ -35,6 +37,29 @@ class TwineEngine {
     private val errorHandlers: MutableList<Pair<Regex, (MatchResult, String, String) -> String>> = mutableListOf()
 
     var moduleLoader: ((name: String) -> String?)? = null
+
+    private val SHARED_INDEX_FUNC = LuaFunc.wrap({ L ->
+        L.getField(1, "__twineName")
+        val instanceKey = L.checkString(-1); L.pop(1)
+        val key = L.checkString(2)
+        handleIndex(L, instanceKey, key)
+    }, "__index")
+
+    private val SHARED_NEWINDEX_FUNC = LuaFunc.wrap({ L ->
+        L.getField(1, "__twineName")
+        val instanceKey = L.checkString(-1); L.pop(1)
+        val key = L.checkString(2)
+        handleNewIndex(L, instanceKey, key)
+    }, "__newindex")
+
+    private val SHARED_CALL_FUNC = LuaFunc.wrap({ L ->
+        L.getField(1, "_inst")
+        val instanceKey = L.checkString(-1); L.pop(1)
+        L.getField(1, "_func")
+        val funcName = L.checkString(-1); L.pop(1)
+        L.remove(1)
+        handleCall(L, instanceKey, funcName)
+    }, "__call")
 
     init {
         // Load standard Luau libraries
@@ -55,6 +80,7 @@ class TwineEngine {
     fun close() {
         closed = true
         natives.clear()
+        nativeFuncCache.clear()
         state.close()
     }
 
@@ -353,87 +379,18 @@ class TwineEngine {
      * @param native The Kotlin object instance being proxied.
      */
     fun pushNativeTable(L: LuaState, native: TwineNative) {
-        val tableName = native.resolvedName
-
-        // Unique key to prevent native name collisions
         val instanceKey = "native@${System.identityHashCode(native)}"
-
-        // Store the native in the registry so Kotlin doesn't delete it
         natives[instanceKey] = native
 
-        L.newTable() // proxy table
-
-        // Stamp the table so it can be recognized as a native table
+        L.newTable()
         L.pushString(instanceKey)
         L.setField(-2, "__twineName")
 
-        L.newTable() // metadata table
-
-        // __index:
-        // called when Lua tries to read a property or function
-        // does *NOT* cache due to .mutableGlobals(natives.keys.toList())
-        L.pushFunction(LuaFunc.wrap({ innerL ->
-            val key = innerL.checkString(2)
-
-            if (key == "__twineName") {
-                innerL.pushString(tableName)
-                return@wrap 1
-            }
-
-            // Functions check
-            val functions = native.getFunctions().filter { it.first == key }
-            if (functions.isNotEmpty()) {
-                val funcs = functions.map { it.second }
-                innerL.pushFunction(LuaFunc.wrap({ callL ->
-                    val func = OverloadResolver.find(callL, funcs, natives, key)
-                    val args = resolveArgs(callL, func)
-                    val result = func.call(native, *args)
-                    val returnType = func.returnType.classifier as? KClass<*>
-                    LuaTypeResolver.push(callL, result, returnType) { l, n ->
-                        pushNativeTable(l, n)
-                    }
-                    1
-                }, key))
-                return@wrap 1
-            }
-
-            // Props check
-            val prop = native.getProperties().find { it.first == key }?.second
-            if (prop != null) {
-                @Suppress("UNCHECKED_CAST")
-                val value = (prop as KProperty1<Any, *>).get(native)
-                val returnType = prop.returnType.classifier as? KClass<*>
-                LuaTypeResolver.push(innerL, value, returnType) { l, n ->
-                    pushNativeTable(l, n)
-                }
-                return@wrap 1
-            }
-
-            innerL.pushNil()
-            1
-        }, "__index"))
+        L.newTable()
+        L.pushFunction(SHARED_INDEX_FUNC)
         L.setField(-2, "__index")
-
-        // __newindex:
-        // called when Lua tries to set a property
-        L.pushFunction(LuaFunc.wrap({ innerL ->
-            val key = innerL.checkString(2)
-            val prop = native.getProperties().find { it.first == key }?.second
-
-            if (prop is kotlin.reflect.KMutableProperty1<*, *>) {
-                val valueType = prop.returnType.classifier as? KClass<*>
-                val newValue = LuaTypeResolver.read(innerL, 3, valueType, natives)
-                @Suppress("UNCHECKED_CAST")
-                (prop as kotlin.reflect.KMutableProperty1<Any, Any?>).set(native, newValue)
-
-                return@wrap 0
-            }
-
-            innerL.rawSet(1)
-            0
-        }, "__newindex"))
+        L.pushFunction(SHARED_NEWINDEX_FUNC)
         L.setField(-2, "__newindex")
-
         L.setMetaTable(-2)
     }
 
@@ -563,5 +520,72 @@ class TwineEngine {
      */
     private fun captureCallback(L: LuaState, index: Int): LuaCallback {
         return LuaCallback.capture(L, index, WeakReference(this))
+    }
+
+    fun handleIndex(L: LuaState, instanceKey: String, key: String): Int {
+        val native = natives[instanceKey] ?: run { L.pushNil(); return 1 }
+        val tableName = native.resolvedName
+
+        if (key == "__twineName") {
+            L.pushString(tableName)
+            return 1
+        }
+
+        val functions = native.getFunctions().filter { it.first == key }
+        if (functions.isNotEmpty()) {
+            L.newTable()
+            L.pushString(instanceKey)
+            L.setField(-2, "_inst")
+            L.pushString(key)
+            L.setField(-2, "_func")
+            L.newTable()
+            L.pushFunction(SHARED_CALL_FUNC)
+            L.setField(-2, "__call")
+            L.setMetaTable(-2)
+            return 1
+        }
+
+        val prop = native.getProperties().find { it.first == key }?.second
+        if (prop != null) {
+            @Suppress("UNCHECKED_CAST")
+            val value = (prop as KProperty1<Any, *>).get(native)
+            val returnType = prop.returnType.classifier as? KClass<*>
+            LuaTypeResolver.push(L, value, returnType) { l, n -> pushNativeTable(l, n) }
+            return 1
+        }
+
+        L.pushNil()
+        return 1
+    }
+
+    fun handleNewIndex(L: LuaState, instanceKey: String, key: String): Int {
+        val native = natives[instanceKey] ?: return 0
+
+        val prop = native.getProperties().find { it.first == key }?.second
+        if (prop is kotlin.reflect.KMutableProperty1<*, *>) {
+            val valueType = prop.returnType.classifier as? KClass<*>
+            val newValue = LuaTypeResolver.read(L, 3, valueType, natives)
+            @Suppress("UNCHECKED_CAST")
+            (prop as kotlin.reflect.KMutableProperty1<Any, Any?>).set(native, newValue)
+            return 0
+        }
+
+        L.rawSet(1)
+        return 0
+    }
+
+    fun handleCall(L: LuaState, instanceKey: String, funcName: String): Int {
+        val native = natives[instanceKey] ?: run { L.pushNil(); return 1 }
+
+        val functions = native.getFunctions().filter { it.first == funcName }
+        if (functions.isEmpty()) { L.pushNil(); return 1 }
+
+        val funcs = functions.map { it.second }
+        val func = OverloadResolver.find(L, funcs, natives, funcName)
+        val args = resolveArgs(L, func)
+        val result = func.call(native, *args)
+        val returnType = func.returnType.classifier as? KClass<*>
+        LuaTypeResolver.push(L, result, returnType) { l, n -> pushNativeTable(l, n) }
+        return 1
     }
 }
