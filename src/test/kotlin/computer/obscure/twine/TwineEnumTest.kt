@@ -1,113 +1,86 @@
 package computer.obscure.twine
 
-import org.junit.jupiter.api.Assertions.assertEquals
+import computer.obscure.twine.annotations.TwineFunction
+import computer.obscure.twine.annotations.TwineProperty
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
-import org.luaj.vm2.LuaTable
-import org.luaj.vm2.LuaValue
+import kotlin.test.assertEquals
 
 class TwineEnumTest {
+    private lateinit var engine: TwineEngine
+    private val output = mutableListOf<String>()
 
-    /**
-     * Class being tested: TwineEnum
-     *
-     * Description:
-     * The TwineEnum class wraps an Enum and exposes functionality for converting the Enum to a LuaTable.
-     * The `toLuaTable()` method converts enum constants to a LuaTable where each constant is a field
-     * with the name of the enum constant as the key, and its ordinal as the value.
-     */
-
-    @Suppress("unused")
-    private enum class SampleEnum {
+    enum class TestEnum {
         FIRST, SECOND, THIRD
     }
 
-    @Test
-    fun `toLuaTable should convert an enum with multiple constants to a LuaTable`() {
-        // Arrange
-//        val enum = SampleEnum.entries[0]
-        val twineEnum = TwineEnum(SampleEnum::class)
+    @BeforeEach
+    fun setup() {
+        engine = TwineEngine()
+        engine.register(object : TwineNative("capture") {
+            @TwineFunction
+            fun record(value: String) { output.add(value) }
+        })
+    }
 
-        // Act
-        val luaTable = twineEnum.toLuaTable()
-
-        // Assert
-        assertEquals(4, luaTable.keys().size) // 4, including the __javaClass key
-        assertEquals(LuaValue.valueOf(0), luaTable.get("FIRST").get("enumOrdinal"))
-        assertEquals(LuaValue.valueOf(1), luaTable.get("SECOND").get("enumOrdinal"))
-        assertEquals(LuaValue.valueOf(2), luaTable.get("THIRD").get("enumOrdinal"))
+    @AfterEach
+    fun teardown() {
+        output.clear()
+        engine.close()
     }
 
     @Test
-    fun `fromLuaTable should convert a LuaTable with multiple constants back to the corresponding enum value`() {
-        // Arrange
-        val twineEnum = TwineEnum(SampleEnum::class)
-        val luaTable = LuaTable()
-        luaTable.set(1, LuaValue.valueOf("SECOND"))
+    fun `reads enum property`() {
+        engine.register(object : TwineNative("t") {
+            @TwineProperty
+            val value: TestEnum = TestEnum.FIRST
+        })
 
-        // Act
-        val result = twineEnum.fromLuaTable(luaTable)
-
-        // Assert
-        assertEquals(SampleEnum.SECOND, result)
+        engine.run("capture.record(t.value)")
+        assertEquals(listOf("FIRST"), output)
     }
 
     @Test
-    fun `fromLuaTable should properly handle a LuaTable with a single constant`() {
-        // Arrange
-        val twineEnum = TwineEnum(SingleValueEnum::class)
-        val luaTable = LuaTable()
-        luaTable.set(1, LuaValue.valueOf("FIRST"))
+    fun `passes enum into function`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun accept(value: TestEnum) = value.name
+        })
 
-        // Act
-        val result = twineEnum.fromLuaTable(luaTable)
+        engine.run(""" 
+            capture.record(t.accept("SECOND"))
+        """.trimIndent())
 
-        // Assert
-        assertEquals(SingleValueEnum.FIRST, result)
+        assertEquals(listOf("SECOND"), output)
     }
 
     @Test
-    fun `fromLuaTable should throw TwineError if the LuaTable contains an invalid enum constant`() {
-        // Arrange
-        val twineEnum = TwineEnum(SampleEnum::class)
-        val luaTable = LuaTable()
-        luaTable.set(1, LuaValue.valueOf("INVALID_CONSTANT"))
+    fun `returns enum from function`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun give(): TestEnum = TestEnum.THIRD
+        })
 
-        // Act & Assert
-        val exception = assertThrows<TwineError> {
-            twineEnum.fromLuaTable(luaTable)
+        engine.run("capture.record(t.give())")
+        assertEquals(listOf("THIRD"), output)
+    }
+
+    @Test
+    fun `invalid enum value throws`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun accept(value: TestEnum) = value.name
+        })
+
+        try {
+            engine.run(""" 
+                t.accept("NOT_REAL")
+            """.trimIndent())
+        } catch (_: Exception) {
+            return // expected
         }
-        assertEquals("Enum constant not found", exception.message)
+
+        error("Expected enum conversion to fail")
     }
-
-    @Test
-    fun `toLuaTable should handle an enum with a single constant correctly`() {
-        // Arrange
-        val twineEnum = TwineEnum(SingleValueEnum::class)
-
-        // Act
-        val luaTable = twineEnum.toLuaTable()
-
-        // Assert
-        assertEquals(2, luaTable.keys().size) // 2, including the __javaClass key
-        assertEquals(LuaValue.valueOf(0), luaTable.get("FIRST").get("enumOrdinal"))
-    }
-
-    @Test
-    fun `toLuaTable should handle an empty enum correctly`() {
-        // Arrange
-        val twineEnum = TwineEnum(EmptyEnum::class)
-
-        // Act
-        val luaTable = twineEnum.toLuaTable()
-
-        // Assert
-        assertEquals(1, luaTable.keys().size) // including the __javaClass key
-    }
-
-    private enum class SingleValueEnum {
-        FIRST
-    }
-
-    private enum class EmptyEnum
 }
