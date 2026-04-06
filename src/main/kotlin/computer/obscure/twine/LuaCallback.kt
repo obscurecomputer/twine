@@ -2,6 +2,7 @@ package computer.obscure.twine
 
 import net.hollowcube.luau.LuaState
 import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A wrapper for Luau functions that allows Kotlin to safely call
@@ -29,40 +30,55 @@ class LuaCallback(
         val eng = engine.get() ?: throw IllegalStateException("Engine GCed")
         if (eng.closed) throw IllegalStateException("Engine is closed")
 
+        // Lock the state so >2 threads don't push/pop at the same time
+        // and corrupt the stack
         synchronized(eng.stateLock) {
             val L = eng.state
+
+            // !! Save the current height of the stack so we can
+            // !! return to it later. Do NOT remove !!
             val initialTop = L.top()
 
             try {
+                // Load the hidden global callback table
                 L.getGlobal("__twine_callbacks")
                 if (L.isNil(-1)) {
                     throw IllegalStateException("Callback registry not initialized")
                 }
 
+                // Push the key onto the stack
                 L.pushInteger(key)
+                // Pop the key, push the value found at the key
                 L.getTable(-2)
+                // Remove the registry table from the stack, leaving only the function at the top
                 L.remove(-2)
 
+                // Ensure what was fetched is actually a function and not nil
                 if (L.isNil(-1)) {
                     throw IllegalStateException("Callback has been released")
                 }
-
                 if (!L.isFunction(-1)) {
                     throw IllegalStateException("Registry entry is not a function")
                 }
 
+                // Marshal Kotlin arguments into Lua arguments
                 args.forEach { arg ->
                     LuaTypeResolver.push(L, arg, arg?.let { it::class }) { innerL, native ->
+                        // If the arg is a TwineNative, wrap it in a proxy table so Lua can use it
                         eng.pushNativeTable(innerL, native)
                     }
                 }
 
+                // Call the function with the args pushed to the stack
+                // 0 = no expected results
                 L.call(args.size, 0)
 
             } catch (e: Exception) {
                 if (e is IllegalStateException) throw e
                 TwineLogger.error("Callback $key failed: ${e.message}")
             } finally {
+                // !! Reset the stack pointer
+                // !! VERY IMPORTANT !! DO NOT REMOVE !!
                 L.top(initialTop)
             }
         }
@@ -83,7 +99,10 @@ class LuaCallback(
     }
 
     companion object {
-        private val nextKey = java.util.concurrent.atomic.AtomicInteger(1)
+        /**
+         * Increments every time a new function is captured to ensure no callbacks collide
+         */
+        private val nextKey = AtomicInteger(1)
 
         /**
          * Captures a function from the current Luau stack and stores it in a
@@ -97,9 +116,14 @@ class LuaCallback(
         fun capture(state: LuaState, index: Int, engine: WeakReference<TwineEngine>): LuaCallback {
             val eng = engine.get() ?: error("Engine GCed during capture")
 
+            // Lock the state so >2 threads don't push/pop at the same time
+            // and corrupt the stack
             synchronized(eng.stateLock) {
+                // !! Save the current height of the stack so we can
+                // !! return to it later. Do NOT remove !!
                 val initialTop = state.top()
                 try {
+                    // Initialize the global registry table if it doesn't exist yet
                     state.getGlobal("__twine_callbacks")
                     if (state.isNil(-1)) {
                         state.pop(1)
@@ -108,12 +132,18 @@ class LuaCallback(
                         state.setGlobal("__twine_callbacks")
                     }
 
+                    // Assign a unique ID and store the function
                     val key = nextKey.getAndIncrement()
+
+                    // Copy the function at [index] to the top of the stack
                     state.pushValue(index)
+                    // Store the top value in the table at -2 with key [key]
                     state.rawSetI(-2, key)
 
                     return LuaCallback(state, key, engine)
                 } finally {
+                    // !! Reset the stack pointer
+                    // !! VERY IMPORTANT !! DO NOT REMOVE !!
                     state.top(initialTop)
                 }
             }
