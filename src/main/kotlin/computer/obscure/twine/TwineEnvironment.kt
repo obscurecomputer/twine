@@ -10,7 +10,6 @@ class TwineEnvironment {
     }
 
     fun register(native: TwineNative) {
-        println("register ${native.resolvedName}")
         entries[native.resolvedName] = native
     }
 
