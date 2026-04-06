@@ -90,15 +90,18 @@ class TwineEngine {
         L.getGlobal("_G")
 
         // Map Kotlin functions to global Lua functions
-        for ((name, func) in native.getFunctions()) {
+        val functions = native.getFunctions().groupBy({ it.first }, { it.second })
+
+        for ((name, funcs) in functions) {
             L.pushFunction(
                 LuaFunc.wrap({ innerL: LuaState ->
+                    val func = OverloadResolver.find(innerL, funcs, natives, name)
                     val args = resolveArgs(innerL, func)
                     val result = func.call(native, *args)
                     val returnType = func.returnType.classifier as? KClass<*>
                     LuaTypeResolver.push(innerL, result, returnType) { l, n -> pushNativeTable(l, n) }
                     1
-                }, func.name)
+                }, name)
             )
             L.setField(-2, name)
         }
@@ -233,7 +236,7 @@ class TwineEngine {
             if (functions.isNotEmpty()) {
                 val funcs = functions.map { it.second }
                 innerL.pushFunction(LuaFunc.wrap({ callL ->
-                    val func = OverloadResolver.find(callL, funcs, natives)
+                    val func = OverloadResolver.find(callL, funcs, natives, key)
                     val args = resolveArgs(callL, func)
                     val result = func.call(native, *args)
                     val returnType = func.returnType.classifier as? KClass<*>
@@ -287,9 +290,29 @@ class TwineEngine {
      * @return An array of Kotlin objects mapped from the Luau stack.
      */
     private fun resolveArgs(L: LuaState, func: KFunction<*>): Array<Any?> {
-        return Array(func.parameters.size - 1) { i ->
-            val type = func.parameters[i + 1].type.classifier as? KClass<*>
-            LuaTypeResolver.read(L, i + 1, type, natives)
+        val params = func.parameters.drop(1)
+        val argCount = L.top()
+
+        return Array(params.size) { i ->
+            val param = params[i]
+            val type = param.type.classifier as? KClass<*>
+
+            if (param.isVararg) {
+                val varargStart = i + 1
+                val varargCount = (argCount - varargStart + 1).coerceAtLeast(0)
+
+                // Get the component type (if vararg is String, component is String)
+                val componentType = param.type.arguments.firstOrNull()?.type?.classifier as? KClass<*> ?: Any::class
+
+                val array = java.lang.reflect.Array.newInstance(componentType.java, varargCount)
+                for (j in 0 until varargCount) {
+                    val value = LuaTypeResolver.read(L, varargStart + j, componentType, natives)
+                    java.lang.reflect.Array.set(array, j, value)
+                }
+                array
+            } else {
+                LuaTypeResolver.read(L, i + 1, type, natives)
+            }
         }
     }
 }
