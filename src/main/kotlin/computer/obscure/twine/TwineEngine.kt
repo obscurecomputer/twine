@@ -186,28 +186,23 @@ class TwineEngine {
         val compiler = LuauCompiler.builder()
             .optimizationLevel(OptimizationLevel.BASELINE)
             .debugLevel(DebugLevel.NONE)
-            // IMPORTANT!!
             .mutableGlobals(natives.keys.toList())
             .build()
         val bytecode = compiler.compile(script)
 
         val thread = state.newThread()
-        try {
-            thread.sandboxThread()
-            thread.load(name, bytecode)
+        thread.sandboxThread()
+        thread.load(name, bytecode)
 
-            val status = thread.resume(null, 0)
-            if (status.ordinal > 1) {
-                throw RuntimeException(thread.checkString(-1))
-            }
-
-            val top = thread.top()
-            return if (top > 0) {
-                LuaTypeResolver.read(thread, top, Any::class, natives)
-            } else null
-        } finally {
-            state.top(0)
+        val status = thread.resume(null, 0)
+        if (status.ordinal > 1) {
+            throw RuntimeException(thread.checkString(-1))
         }
+
+        val top = thread.top()
+        return if (top > 0) {
+            LuaTypeResolver.read(thread, top, Any::class, natives)
+        } else null
     }
 
     /**
@@ -218,8 +213,12 @@ class TwineEngine {
      * @param native The Kotlin object instance being proxied.
      */
     private fun pushNativeTable(L: LuaState, native: TwineNative) {
-        val tableName = native.resolvedName
-        natives[tableName] = native
+        val tableName = native.resolvedName.takeIf { it.isNotEmpty() }
+
+        if (tableName != null) {
+            // only register named globals
+            natives[tableName] = native
+        }
 
         L.newTable() // proxy table
         L.newTable()

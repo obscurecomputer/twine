@@ -24,32 +24,26 @@ class LuaCallback(
      * @throws IllegalStateException If the function has been released or is no longer valid.
      */
     fun invoke(vararg args: Any?) {
-        val top = state.top()
-        try {
-            state.getGlobal("__twine_callbacks")
-            state.pushInteger(key)
-            state.getTable(-2)
+        state.getGlobal("__twine_callbacks")
+        state.pushInteger(key)
+        state.getTable(-2)
 
-            // Remove the registry table from stack, leaving just the function
-            state.remove(-2)
+        // Remove the registry table from stack, leaving just the function
+        state.remove(-2)
 
-            if (!state.isFunction(-1)) {
-                state.pop(1)
-                error("Callback $key is invalid or released")
-            }
-
-            // Push args onto stack
-            args.forEach { arg ->
-                LuaTypeResolver.push(state, arg, arg?.let { it::class }) { L, native ->
-                    L.pushString(native.toString())
-                }
-            }
-
-            state.call(args.size, 0)
-        } finally {
-            // Balance stack even if execution fails
-            state.top(top)
+        if (!state.isFunction(-1)) {
+            state.pop(1)
+            error("Callback $key is invalid or released")
         }
+
+        // Push args onto stack
+        args.forEach { arg ->
+            LuaTypeResolver.push(state, arg, arg?.let { it::class }) { L, native ->
+                L.pushString(native.toString())
+            }
+        }
+
+        state.call(args.size, 0)
     }
 
     /**
