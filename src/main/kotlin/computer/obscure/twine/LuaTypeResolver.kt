@@ -1,6 +1,7 @@
 package computer.obscure.twine
 
 import net.hollowcube.luau.LuaState
+import java.lang.ref.WeakReference
 import java.util.Optional
 import kotlin.reflect.KClass
 import kotlin.reflect.full.isSubclassOf
@@ -41,7 +42,13 @@ object LuaTypeResolver {
      * @throws IllegalStateException If the type is a native object and no matching registration exists.
      * @return The converted Kotlin object, or null.
      */
-    fun read(L: LuaState, index: Int, type: KClass<*>?, natives: Map<String, TwineNative>): Any? {
+    fun read(
+        L: LuaState,
+        index: Int,
+        type: KClass<*>?,
+        natives: Map<String, TwineNative>,
+        engine: WeakReference<TwineEngine>? = null
+    ): Any? {
         return when {
             type == String::class -> L.checkString(index)
             type == Int::class -> L.checkInteger(index)
@@ -49,7 +56,7 @@ object LuaTypeResolver {
             type == Double::class -> L.checkNumber(index)
             type == Float::class -> L.checkNumber(index).toFloat()
             type == Boolean::class -> L.toBoolean(index)
-            type == LuaCallback::class -> readCallback(L, index)
+            type == LuaCallback::class -> readCallback(L, index, engine)
             type != null && type.isSubclassOf(TwineNative::class) -> readNative(L, index, natives)
 
             type != null && type.java.isEnum -> {
@@ -148,8 +155,12 @@ object LuaTypeResolver {
      * @return The mapped [TwineNative] instance.
      * @throws IllegalStateException If the `__twineName` is missing or not registered.
      */
-    private fun readNative(L: LuaState, index: Int, natives: Map<String, TwineNative>): TwineNative {
+    private fun readNative(L: LuaState, index: Int, natives: Map<String, TwineNative>): TwineNative? {
         L.getField(index, "__twineName")
+        if (L.isNil(-1)) {
+            L.pop(1)
+            return null
+        }
         val name = L.checkString(-1)
         L.pop(1)
         return natives[name] ?: error("No native registered with name '$name'")
@@ -161,7 +172,10 @@ object LuaTypeResolver {
      * @param index The stack index where the Luau function resides.
      * @return A [LuaCallback] handle that can be invoked from Kotlin later.
      */
-    private fun readCallback(L: LuaState, index: Int): LuaCallback {
-        return LuaCallback.capture(L, index)
+    private fun readCallback(L: LuaState, index: Int, engine: WeakReference<TwineEngine>?): LuaCallback {
+        val engRef = engine ?: error("Cannot capture LuaCallback: TwineEngine reference is missing")
+        if (engRef.get() == null) error("Cannot capture LuaCallback: TwineEngine has been garbage collected")
+
+        return LuaCallback.capture(L, index, engRef)
     }
 }

@@ -5,6 +5,7 @@ import net.hollowcube.luau.LuaState
 import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
 import net.hollowcube.luau.compiler.OptimizationLevel
+import java.lang.ref.WeakReference
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
@@ -17,10 +18,15 @@ import kotlin.reflect.KProperty1
  * Provides an intuitive engine abstracting most of the functionality of Twine.
  */
 class TwineEngine {
+    var closed = false
+        private set
+    val stateLock = Any()
+
     val state: LuaState = LuaState.newState()
 
     /**
-     *  Global registry of Kotlin objects exposed to the Lua VM */
+     * Global registry of Kotlin objects exposed to the Lua VM
+     */
     val natives: MutableMap<String, TwineNative> = mutableMapOf()
 
     /**
@@ -28,9 +34,14 @@ class TwineEngine {
      */
     private val errorHandlers: MutableList<Pair<Regex, (MatchResult, String, String) -> String>> = mutableListOf()
 
+    var moduleLoader: ((name: String) -> String?)? = null
+
     init {
         // Load standard Luau libraries
         state.openLibs()
+
+        state.newTable()
+        state.setGlobal("__twine_callbacks")
 
         onError(Regex("""attempt to index \? \(a nil value\)""")) { _, scriptName, raw ->
             val line = raw.substringAfter(":").substringBefore(" ")
@@ -42,6 +53,7 @@ class TwineEngine {
      * Clean up resources and close the VM.
      */
     fun close() {
+        closed = true
         natives.clear()
         state.close()
     }
@@ -52,6 +64,7 @@ class TwineEngine {
      * @param native The Kotlin object instance to expose to Lua.
      */
     fun register(native: TwineNative) {
+        if (closed) return
         pushNativeTable(state, native)
         state.setGlobal(native.resolvedName)
     }
@@ -63,6 +76,7 @@ class TwineEngine {
      * @param enum The Twine representation of a Kotlin Enum.
      */
     fun register(enum: TwineEnum) {
+        if (closed) return
         val values = enum.getValues()
 
         values.forEach { natives[it.resolvedName] = it }
@@ -86,6 +100,7 @@ class TwineEngine {
      * @param native The native object whose functions and properties will be injected into the global scope.
      */
     fun setBase(native: TwineNative) {
+        if (closed) return
         val L = state
         L.getGlobal("_G")
 
@@ -183,26 +198,119 @@ class TwineEngine {
      * @return The final value on the Luau stack after execution.
      */
     private fun runUnsafe(name: String, script: String): Any? {
+        if (closed) {
+            TwineLogger.error("Attempted to run script '$name' on a closed engine!")
+            throw TwineError("Engine is closed")
+        }
+        if (script.trim().isEmpty()) return null
+
+        val mainStackStart = state.top()
+
         val compiler = LuauCompiler.builder()
-            .optimizationLevel(OptimizationLevel.BASELINE)
+            .optimizationLevel(OptimizationLevel.NONE)
             .debugLevel(DebugLevel.NONE)
             .mutableGlobals(natives.keys.toList())
             .build()
-        val bytecode = compiler.compile(script)
 
-        val thread = state.newThread()
-        thread.sandboxThread()
-        thread.load(name, bytecode)
-
-        val status = thread.resume(null, 0)
-        if (status.ordinal > 1) {
-            throw RuntimeException(thread.checkString(-1))
+        val bytecode = try {
+            compiler.compile(script)
+        } catch (e: Exception) {
+            TwineLogger.error("Compilation failed for $name: ${e.message}")
+            throw e
         }
 
-        val top = thread.top()
-        return if (top > 0) {
-            LuaTypeResolver.read(thread, top, Any::class, natives)
-        } else null
+        if (bytecode.isEmpty()) {
+            TwineLogger.warn("Compiler returned empty bytecode for $name")
+            return null
+        }
+
+        val thread = state.newThread()
+        TwineLogger.debug("Thread created for $name [Parent Stack: $mainStackStart -> ${state.top()}]")
+        thread.sandboxThread()
+
+        try {
+            thread.load(name, bytecode)
+
+            val stackBeforeExec = thread.top()
+            val status = thread.resume(null, 0)
+
+            if (status.ordinal > 1) {
+                val error = if (thread.top() > 0) thread.checkString(-1) else "Unknown VM Error"
+                TwineLogger.error("Runtime Error in $name: $error")
+                throw RuntimeException(error)
+            }
+
+            val top = thread.top()
+            if (top != 0) {
+                val typeName = thread.typeName(top)
+                TwineLogger.debug("Script $name finished. Thread Stack: $stackBeforeExec -> $top (Type: $typeName)")
+            }
+
+            if (top <= 0) return null
+
+            if (thread.isTable(top)) {
+                return try {
+                    val map = tableToMap(thread, top)
+                    TwineLogger.debug("Successfully marshaled table for $name")
+                    map
+                } catch (e: Exception) {
+                    TwineLogger.error("Failed to marshal table for $name: ${e.message}")
+                    "{Error Marshaling Table}"
+                }
+            }
+
+            return try {
+                LuaTypeResolver.read(thread, top, Any::class, natives)
+            } catch (e: Exception) {
+                TwineLogger.error("Failed to marshal return value for $name: ${e.message}")
+                null
+            }
+
+        } finally {
+            thread.top(0)
+
+            state.top(mainStackStart)
+
+            if (state.top() != mainStackStart) {
+                TwineLogger.warn("Stack imbalance detected in $name! Expected $mainStackStart, got ${state.top()}")
+            }
+        }
+    }
+
+    fun tableToMap(L: LuaState, index: Int): Any? {
+        val absoluteIndex = if (index < 0) L.top() + index + 1 else index
+
+        L.getField(absoluteIndex, "__twineName")
+        val isNative = !L.isNil(-1)
+        L.pop(1)
+
+        if (isNative) {
+            return LuaTypeResolver.read(L, absoluteIndex, Any::class, natives)
+        }
+
+        val map = mutableMapOf<Any?, Any?>()
+        L.pushNil()
+        while (L.next(absoluteIndex)) {
+            val key = try {
+                if (L.isString(-2) || L.isNumber(-2)) {
+                    LuaTypeResolver.read(L, -2, Any::class, natives)
+                } else {
+                    "__lua_key_" + L.typeName(-2)
+                }
+            } catch (e: Exception) { "unknown_key" }
+
+            val value = when {
+                L.isTable(-1) -> tableToMap(L, -1)
+                L.isFunction(-1) -> captureCallback(L, -1)
+                else -> try {
+                    LuaTypeResolver.read(L, -1, Any::class, natives)
+                } catch (e: Exception) { "{Unreadable}" }
+            }
+
+            map[key] = value
+            L.pop(1)
+        }
+        return map
     }
 
     /**
@@ -212,15 +320,17 @@ class TwineEngine {
      * @param L The current [LuaState].
      * @param native The Kotlin object instance being proxied.
      */
-    private fun pushNativeTable(L: LuaState, native: TwineNative) {
-        val tableName = native.resolvedName.takeIf { it.isNotEmpty() }
+    fun pushNativeTable(L: LuaState, native: TwineNative) {
+        val tableName = native.resolvedName
+        val instanceKey = "native@${System.identityHashCode(native)}"
 
-        if (tableName != null) {
-            // only register named globals
-            natives[tableName] = native
-        }
+        natives[instanceKey] = native
 
         L.newTable() // proxy table
+
+        L.pushString(instanceKey)
+        L.setField(-2, "__twineName")
+
         L.newTable()
 
         L.pushFunction(LuaFunc.wrap({ innerL ->
@@ -269,7 +379,6 @@ class TwineEngine {
                 @Suppress("UNCHECKED_CAST")
                 (prop as kotlin.reflect.KMutableProperty1<Any, Any?>).set(native, newValue)
 
-                println("$key > $newValue")
                 return@wrap 0
             }
 
@@ -281,6 +390,54 @@ class TwineEngine {
         L.setMetaTable(-2)
     }
 
+    fun enableRequire() {
+        state.newTable()
+        state.newTable()
+        state.setField(-2, "loaded")
+        state.setGlobal("package")
+
+        state.pushFunction(LuaFunc.wrap({ L ->
+            val moduleName = L.checkString(1)
+
+            L.getGlobal("package")
+            L.getField(-1, "loaded")
+            L.getField(-1, moduleName)
+            if (!L.isNil(-1)) {
+                L.remove(-2)
+                L.remove(-2)
+                return@wrap 1
+            }
+            L.pop(3)
+
+            val source = moduleLoader?.invoke(moduleName)
+                ?: throw TwineError("module '$moduleName' not found")
+
+            val compiler = LuauCompiler.builder()
+                .optimizationLevel(OptimizationLevel.BASELINE)
+                .debugLevel(DebugLevel.NONE)
+                .mutableGlobals(natives.keys.toList())
+                .build()
+            val bytecode = compiler.compile(source)
+
+            L.load(moduleName, bytecode)
+            L.call(0, 1)
+
+            if (L.isNil(-1)) {
+                L.pop(1)
+                L.pushBoolean(true)
+            }
+
+            L.getGlobal("package")
+            L.getField(-1, "loaded")
+            L.pushValue(-3)
+            L.setField(-2, moduleName)
+            L.pop(2)
+
+            1
+        }, "require"))
+        state.setGlobal("require")
+    }
+
     /**
      * Marshals Luau stack values into a Kotlin-compatible array of arguments for function invocation.
      *
@@ -290,6 +447,7 @@ class TwineEngine {
      */
     private fun resolveArgs(L: LuaState, func: KFunction<*>): Array<Any?> {
         val params = func.parameters.drop(1)
+        val engineRef = WeakReference(this)
         val argCount = L.top()
 
         return Array(params.size) { i ->
@@ -305,13 +463,17 @@ class TwineEngine {
 
                 val array = java.lang.reflect.Array.newInstance(componentType.java, varargCount)
                 for (j in 0 until varargCount) {
-                    val value = LuaTypeResolver.read(L, varargStart + j, componentType, natives)
+                    val value = LuaTypeResolver.read(L, varargStart + j, componentType, natives, engineRef)
                     java.lang.reflect.Array.set(array, j, value)
                 }
                 array
             } else {
-                LuaTypeResolver.read(L, i + 1, type, natives)
+                LuaTypeResolver.read(L, i + 1, type, natives, engineRef)
             }
         }
+    }
+
+    private fun captureCallback(L: LuaState, index: Int): LuaCallback {
+        return LuaCallback.capture(L, index, WeakReference(this))
     }
 }

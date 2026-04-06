@@ -1,6 +1,7 @@
 package computer.obscure.twine
 
 import net.hollowcube.luau.LuaState
+import java.lang.ref.WeakReference
 
 /**
  * A wrapper for Luau functions that allows Kotlin to safely call
@@ -14,7 +15,8 @@ import net.hollowcube.luau.LuaState
  */
 class LuaCallback(
     private val state: LuaState,
-    private val key: Int
+    private val key: Int,
+    private val engine: WeakReference<TwineEngine>
 ) {
     /**
      * Executes the wrapped Luau function with the provided arguments.
@@ -24,26 +26,46 @@ class LuaCallback(
      * @throws IllegalStateException If the function has been released or is no longer valid.
      */
     fun invoke(vararg args: Any?) {
-        state.getGlobal("__twine_callbacks")
-        state.pushInteger(key)
-        state.getTable(-2)
+        val eng = engine.get() ?: throw IllegalStateException("Engine GCed")
+        if (eng.closed) throw IllegalStateException("Engine is closed")
 
-        // Remove the registry table from stack, leaving just the function
-        state.remove(-2)
+        synchronized(eng.stateLock) {
+            val L = eng.state
+            val initialTop = L.top()
 
-        if (!state.isFunction(-1)) {
-            state.pop(1)
-            error("Callback $key is invalid or released")
-        }
+            try {
+                L.getGlobal("__twine_callbacks")
+                if (L.isNil(-1)) {
+                    throw IllegalStateException("Callback registry not initialized")
+                }
 
-        // Push args onto stack
-        args.forEach { arg ->
-            LuaTypeResolver.push(state, arg, arg?.let { it::class }) { L, native ->
-                L.pushString(native.toString())
+                L.pushInteger(key)
+                L.getTable(-2)
+                L.remove(-2)
+
+                if (L.isNil(-1)) {
+                    throw IllegalStateException("Callback has been released")
+                }
+
+                if (!L.isFunction(-1)) {
+                    throw IllegalStateException("Registry entry is not a function")
+                }
+
+                args.forEach { arg ->
+                    LuaTypeResolver.push(L, arg, arg?.let { it::class }) { innerL, native ->
+                        eng.pushNativeTable(innerL, native)
+                    }
+                }
+
+                L.call(args.size, 0)
+
+            } catch (e: Exception) {
+                if (e is IllegalStateException) throw e
+                TwineLogger.error("Callback $key failed: ${e.message}")
+            } finally {
+                L.top(initialTop)
             }
         }
-
-        state.call(args.size, 0)
     }
 
     /**
@@ -52,6 +74,8 @@ class LuaCallback(
      * the underlying function becomes GCable.
      */
     fun release() {
+        if (engine.get()?.closed == true) return
+
         state.getGlobal("__twine_callbacks")
         state.pushNil()
         state.rawSetI(-2, key)
@@ -67,24 +91,32 @@ class LuaCallback(
          *
          * @param state The current [LuaState].
          * @param index The stack index where the Lua function is located.
+         * @param engine A [WeakReference] containing the [TwineEngine].
          * @return A [LuaCallback] instance that can trigger the function later.
          */
-        fun capture(state: LuaState, index: Int): LuaCallback {
-            state.getGlobal("__twine_callbacks")
-            if (state.isNil(-1)) {
-                state.pop(1)
-                state.newTable()
-                state.pushValue(-1)
-                state.setGlobal("__twine_callbacks")
+        fun capture(state: LuaState, index: Int, engine: WeakReference<TwineEngine>): LuaCallback {
+            val eng = engine.get() ?: error("Engine GCed during capture")
+
+            synchronized(eng.stateLock) {
+                val initialTop = state.top()
+                try {
+                    state.getGlobal("__twine_callbacks")
+                    if (state.isNil(-1)) {
+                        state.pop(1)
+                        state.newTable()
+                        state.pushValue(-1)
+                        state.setGlobal("__twine_callbacks")
+                    }
+
+                    val key = nextKey.getAndIncrement()
+                    state.pushValue(index)
+                    state.rawSetI(-2, key)
+
+                    return LuaCallback(state, key, engine)
+                } finally {
+                    state.top(initialTop)
+                }
             }
-
-            // Give the registry a unique ID
-            val key = nextKey.getAndIncrement()
-            state.pushValue(index)
-            state.rawSetI(-2, key) // registry[key] = function
-            state.pop(1)
-
-            return LuaCallback(state, key)
         }
     }
 }
