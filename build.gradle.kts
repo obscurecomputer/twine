@@ -17,11 +17,17 @@ dependencies {
     implementation("com.google.code.gson:gson:2.13.0")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
-    implementation("dev.hollowcube:luau:1.0.1")
-    implementation("dev.hollowcube:luau-natives-windows-x64:${luauJavaVersion}")
-    implementation("dev.hollowcube:luau-natives-linux-x64:${luauJavaVersion}")
-    implementation("dev.hollowcube:luau-natives-macos-x64:1.0.0-debug")
-    implementation("dev.hollowcube:luau-natives-macos-arm64:${luauJavaVersion}")
+    val luauVersion = "1.0.1"
+    val luauNativeVersion = "1.0.1-debug"
+
+    implementation("dev.hollowcube:luau:$luauVersion")
+    implementation("dev.hollowcube:luau-natives-macos-x64:1.0.0")
+
+    val platforms = listOf("windows-x64", "linux-x64", "macos-arm64")
+    platforms.forEach { platform ->
+        val dep = "dev.hollowcube:luau-natives-$platform:$luauNativeVersion"
+        implementation(dep)
+    }
 }
 
 tasks.test {

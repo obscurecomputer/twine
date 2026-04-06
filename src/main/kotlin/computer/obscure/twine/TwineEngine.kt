@@ -9,27 +9,54 @@ import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KProperty1
 
-
+/**
+ * The main entry point for the Twine Luau integration.
+ * This class manages the Luau VM lifecycle, registration of Kotlin natives,
+ * and script execution.
+ *
+ * Provides an intuitive engine abstracting most of the functionality of Twine.
+ */
 class TwineEngine {
     val state: LuaState = LuaState.newState()
+
+    /**
+     *  Global registry of Kotlin objects exposed to the Lua VM */
     val natives: MutableMap<String, TwineNative> = mutableMapOf()
 
+    /**
+     * Custom handlers to rewrite some error messages in a more intuitive form
+     */
     private val errorHandlers: MutableList<Pair<Regex, (MatchResult, String, String) -> String>> = mutableListOf()
 
     init {
+        // Load standard Luau libraries
         state.openLibs()
     }
 
+    /**
+     * Clean up resources and close the VM.
+     */
     fun close() {
         natives.clear()
         state.close()
     }
 
+    /**
+     * Exposes a [TwineNative] instance as a global variable in the Lua environment.
+     *
+     * @param native The Kotlin object instance to expose to Lua.
+     */
     fun register(native: TwineNative) {
         pushNativeTable(state, native)
         state.setGlobal(native.resolvedName)
     }
 
+    /**
+     * Registers a [TwineEnum], creating a global table in Lua containing
+     * all enum constants as nested tables.
+     *
+     * @param enum The Twine representation of a Kotlin Enum.
+     */
     fun register(enum: TwineEnum) {
         val values = enum.getValues()
 
@@ -47,10 +74,17 @@ class TwineEngine {
         state.setGlobal(enum.resolvedName)
     }
 
+    /**
+     * Injects functions and properties from a [TwineNative] directly into
+     * the global Luau scope (_G).
+     *
+     * @param native The native object whose functions and properties will be injected into the global scope.
+     */
     fun setBase(native: TwineNative) {
         val L = state
         L.getGlobal("_G")
 
+        // Map Kotlin functions to global Lua functions
         for ((name, func) in native.getFunctions()) {
             L.pushFunction(
                 LuaFunc.wrap({ innerL: LuaState ->
@@ -64,6 +98,7 @@ class TwineEngine {
             L.setField(-2, name)
         }
 
+        // Map Kotlin properties to the global table via metatable
         val properties = native.getProperties()
         if (properties.isNotEmpty()) {
             L.newTable()
@@ -94,10 +129,30 @@ class TwineEngine {
         errorHandlers.add(pattern to handler)
     }
 
+    /**
+     * Compiles and executes a Luau script string.
+     *
+     * @param script The Luau source code to execute.
+     * @return The value returned by the script, if any, converted to a Kotlin type.
+     */
     fun run(script: String): Any? = runUnsafe("script.luau", script)
 
+    /**
+     * Compiles and executes a Luau script string with default naming.
+     *
+     * @param script The Luau source code to execute.
+     * @return A [Result] containing the return value or a [TwineError].
+     */
     fun runSafe(script: String) = runSafe("script.luau", script)
 
+    /**
+     * Executes a script safely, catching Luau VM exceptions and passing them through
+     * registered [errorHandlers].
+     *
+     * @param name The name of the script (used for stack traces).
+     * @param script The Luau source code to execute.
+     * @return A [Result] wrapping the script output/formatted error message.
+     */
     fun runSafe(name: String, script: String): Result<Any?> {
         return try {
             Result.success(runUnsafe(name, script))
@@ -111,10 +166,19 @@ class TwineEngine {
         }
     }
 
+    /**
+     * Internal logic to compile and execute bytecode.
+     * Configures the compiler to treat registered natives as mutable globals to prevent caching issues.
+     *
+     * @param name Script name for the VM.
+     * @param script Source code.
+     * @return The final value on the Luau stack after execution.
+     */
     private fun runUnsafe(name: String, script: String): Any? {
         val compiler = LuauCompiler.builder()
             .optimizationLevel(OptimizationLevel.BASELINE)
             .debugLevel(DebugLevel.NONE)
+            // IMPORTANT!!
             .mutableGlobals(natives.keys.toList())
             .build()
         val bytecode = compiler.compile(script)
@@ -138,6 +202,13 @@ class TwineEngine {
         }
     }
 
+    /**
+     * Pushes a proxy table onto the Luau stack that represents a Kotlin [TwineNative].
+     * Uses metatables to intercept `__index` (get/call) and `__newindex` (set) operations.
+     *
+     * @param L The current [LuaState].
+     * @param native The Kotlin object instance being proxied.
+     */
     private fun pushNativeTable(L: LuaState, native: TwineNative) {
         val tableName = native.resolvedName
         natives[tableName] = native
@@ -203,6 +274,13 @@ class TwineEngine {
         L.setMetaTable(-2)
     }
 
+    /**
+     * Marshals Luau stack values into a Kotlin-compatible array of arguments for function invocation.
+     *
+     * @param L The current [LuaState].
+     * @param func The Kotlin function being called.
+     * @return An array of Kotlin objects mapped from the Luau stack.
+     */
     private fun resolveArgs(L: LuaState, func: KFunction<*>): Array<Any?> {
         return Array(func.parameters.size - 1) { i ->
             val type = func.parameters[i + 1].type.classifier as? KClass<*>
