@@ -32,7 +32,7 @@ open class TwineNative(
          * A constant value used in annotations to indicate that the
          * Lua name should be identical to the Kotlin simple name.
          */
-        val INHERIT_TAG = "INHERIT_FROM_DEFINITION"
+        const val INHERIT_TAG = "INHERIT_FROM_DEFINITION"
     }
 
     /**
