@@ -156,17 +156,19 @@ class TwineEngine {
      * Compiles and executes a Luau script string.
      *
      * @param script The Luau source code to execute.
+     * @param env The [TwineEnvironment] for **this** script.
      * @return The value returned by the script, if any, converted to a Kotlin type.
      */
-    fun run(script: String): Any? = runUnsafe("script.luau", script)
+    fun run(script: String, env: TwineEnvironment? = null): Any? = runUnsafe("script.luau", script, env)
 
     /**
      * Compiles and executes a Luau script string with default naming.
      *
      * @param script The Luau source code to execute.
+     * @param env The [TwineEnvironment] for **this** script.
      * @return A [Result] containing the return value or a [TwineError].
      */
-    fun runSafe(script: String) = runSafe("script.luau", script)
+    fun runSafe(script: String, env: TwineEnvironment? = null) = runSafe("script.luau", script, env)
 
     /**
      * Executes a script safely, catching Luau VM exceptions and passing them through
@@ -174,11 +176,12 @@ class TwineEngine {
      *
      * @param name The name of the script (used for stack traces).
      * @param script The Luau source code to execute.
+     * @param env The [TwineEnvironment] for **this** script.
      * @return A [Result] wrapping the script output/formatted error message.
      */
-    fun runSafe(name: String, script: String): Result<Any?> {
+    fun runSafe(name: String, script: String, env: TwineEnvironment? = null): Result<Any?> {
         return try {
-            Result.success(runUnsafe(name, script))
+            Result.success(runUnsafe(name, script, env))
         } catch (e: Exception) {
             val rawMessage = e.message ?: "Unknown error"
             val newMessage = errorHandlers
@@ -195,9 +198,10 @@ class TwineEngine {
      *
      * @param name Script name for the VM.
      * @param script Source code.
+     * @param env The [TwineEnvironment] for **this** script.
      * @return The final value on the Luau stack after execution.
      */
-    private fun runUnsafe(name: String, script: String): Any? {
+    private fun runUnsafe(name: String, script: String, env: TwineEnvironment? = null): Any? {
         if (closed) {
             TwineLogger.error("Attempted to run script '$name' on a closed engine!")
             throw TwineError("Engine is closed")
@@ -232,6 +236,7 @@ class TwineEngine {
         thread.sandboxThread()
 
         try {
+            env?.applyTo(thread, this)
             // Load bytecode into the thread
             thread.load(name, bytecode)
 
