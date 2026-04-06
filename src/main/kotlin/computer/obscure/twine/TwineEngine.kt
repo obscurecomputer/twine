@@ -31,6 +31,11 @@ class TwineEngine {
     init {
         // Load standard Luau libraries
         state.openLibs()
+
+        onError(Regex("""attempt to index \? \(a nil value\)""")) { _, scriptName, raw ->
+            val line = raw.substringAfter(":").substringBefore(" ")
+            "Lua error in $scriptName:$line — attempted to index a nil value"
+        }
     }
 
     /**

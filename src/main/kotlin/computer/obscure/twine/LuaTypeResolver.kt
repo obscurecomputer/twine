@@ -1,6 +1,7 @@
 package computer.obscure.twine
 
 import net.hollowcube.luau.LuaState
+import java.util.Optional
 import kotlin.reflect.KClass
 import kotlin.reflect.full.isSubclassOf
 
@@ -99,6 +100,36 @@ object LuaTypeResolver {
             is String -> {
                 L.pushString(value)
                 1
+            }
+            is Map<*, *> -> {
+                L.newTable()
+                value.forEach { (k, v) ->
+                    L.pushString(k.toString())
+                    push(L, v, v?.let { it::class }, pushTable)
+                    L.setTable(-3) // table[key] = value
+                }
+                1
+            }
+            is Iterable<*> -> {
+                L.newTable()
+                value.forEachIndexed { index, item ->
+                    push(L, item, item?.let { it::class }, pushTable)
+                    L.rawSetI(-2, index + 1)
+                }
+                1
+            }
+
+            is Array<*> -> {
+                L.newTable()
+                value.forEachIndexed { index, item ->
+                    push(L, item, item?.let { it::class }, pushTable)
+                    L.rawSetI(-2, index + 1)
+                }
+                1
+            }
+
+            is Optional<*> -> {
+                push(L, value.orElse(null), null, pushTable)
             }
             else -> {
                 // Default to string representations of Enums and other unknown objects
