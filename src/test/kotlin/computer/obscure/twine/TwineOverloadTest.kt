@@ -97,6 +97,8 @@ class TwineOverloadTest {
         engine.register(object : TwineNative("math") {
             @TwineFunction
             fun add(a: Double, b: Double) = a + b
+            @TwineFunction
+            fun add(a: String, b: String) = a + b
         })
 
         val result = engine.runSafe("math.add('hello', 5)")

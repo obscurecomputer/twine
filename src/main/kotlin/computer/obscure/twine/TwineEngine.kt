@@ -6,6 +6,7 @@ import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
 import net.hollowcube.luau.compiler.OptimizationLevel
 import java.lang.ref.WeakReference
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
@@ -22,15 +23,14 @@ class TwineEngine {
     var closed = false
         private set
     val stateLock = Any()
-    private val nativeFuncCache: MutableMap<String, LuaFunc> = ConcurrentHashMap()
-    private val nativeCache: MutableMap<String, NativeCache> = ConcurrentHashMap()
+    private val nativeCache: MutableMap<TwineNative, NativeCache> = WeakHashMap()
 
     val state: LuaState = LuaState.newState()
 
     /**
      * Global registry of Kotlin objects exposed to the Lua VM
      */
-    val natives: MutableMap<String, TwineNative> = mutableMapOf()
+    val natives: MutableMap<String, TwineNative> = ConcurrentHashMap()
 
     /**
      * Custom handlers to rewrite some error messages in a more intuitive form
@@ -81,7 +81,7 @@ class TwineEngine {
     fun close() {
         closed = true
         natives.clear()
-        nativeFuncCache.clear()
+        nativeCache.clear()
         state.close()
     }
 
@@ -381,10 +381,10 @@ class TwineEngine {
      */
     fun pushNativeTable(L: LuaState, native: TwineNative) {
         val instanceKey = "native@${System.identityHashCode(native)}"
-        if (!nativeCache.containsKey(instanceKey)) {
-            nativeCache[instanceKey] = NativeCache(native)
-            natives[instanceKey] = native
+        if (!nativeCache.containsKey(native)) {
+            nativeCache[native] = NativeCache(native)
         }
+        natives[instanceKey] = native
 
         L.newTable()
         L.pushString(instanceKey)
@@ -531,7 +531,8 @@ class TwineEngine {
     }
 
     fun handleIndex(L: LuaState, instanceKey: String, key: String): Int {
-        val cache = nativeCache[instanceKey] ?: run { L.pushNil(); return 1 }
+        val native = natives[instanceKey] ?: run { L.pushNil(); return 1 }
+        val cache = nativeCache[native] ?: run { L.pushNil(); return 1 }
 
         if (key == "__twineName") {
             L.pushString(cache.native.resolvedName)
@@ -580,7 +581,8 @@ class TwineEngine {
     }
 
     fun handleCall(L: LuaState, instanceKey: String, funcName: String): Int {
-        val cache = nativeCache[instanceKey] ?: return 0
+        val native = natives[instanceKey] ?: run { L.pushNil(); return 1 }
+        val cache = nativeCache[native] ?: run { L.pushNil(); return 1 }
 
         val funcs = cache.functions[funcName] ?: run {
             L.pushNil()
