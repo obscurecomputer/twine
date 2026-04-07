@@ -31,6 +31,14 @@ object OverloadResolver {
     ): KFunction<*> {
         val argCount = L.top()
 
+        if (overloads.size == 1) {
+            val f = overloads[0]
+            val params = f.parameters.drop(1)
+            if (params.size == argCount || (params.lastOrNull()?.isVararg == true)) {
+                return f
+            }
+        }
+
         val match = overloads.find { func ->
             val params = func.parameters.drop(1)
             val isVararg = params.lastOrNull()?.isVararg == true
@@ -47,10 +55,14 @@ object OverloadResolver {
                 if (i >= fixedParamCount && isVararg) break
 
                 val paramType = params[i].type.classifier as? KClass<*>
+                val luaType = L.type(i + 1)
 
-                val isMatch = LuaTypeResolver.matches(L, i + 1, paramType, natives) ||
-                        (isNumeric(paramType) && L.type(i + 1) == LuaType.NUMBER)
-
+                val isMatch = when {
+                    paramType == Map::class -> luaType == LuaType.TABLE
+                    paramType == List::class -> luaType == LuaType.TABLE
+                    isNumeric(paramType) -> luaType == LuaType.NUMBER
+                    else -> LuaTypeResolver.matches(L, i + 1, paramType, natives)
+                }
                 if (!isMatch) return@find false
             }
             true

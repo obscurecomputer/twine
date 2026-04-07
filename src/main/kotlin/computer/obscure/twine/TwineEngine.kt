@@ -23,6 +23,7 @@ class TwineEngine {
         private set
     val stateLock = Any()
     private val nativeFuncCache: MutableMap<String, LuaFunc> = ConcurrentHashMap()
+    private val nativeCache: MutableMap<String, NativeCache> = ConcurrentHashMap()
 
     val state: LuaState = LuaState.newState()
 
@@ -237,7 +238,7 @@ class TwineEngine {
         val mainStackStart = state.top()
 
         val compiler = LuauCompiler.builder()
-            .optimizationLevel(OptimizationLevel.NONE)
+            .optimizationLevel(OptimizationLevel.MAXIMUM)
             .debugLevel(DebugLevel.NONE)
             // Tell the compiler that these names change and to not cache them
             .mutableGlobals(natives.keys.toList())
@@ -380,7 +381,10 @@ class TwineEngine {
      */
     fun pushNativeTable(L: LuaState, native: TwineNative) {
         val instanceKey = "native@${System.identityHashCode(native)}"
-        natives[instanceKey] = native
+        if (!nativeCache.containsKey(instanceKey)) {
+            nativeCache[instanceKey] = NativeCache(native)
+            natives[instanceKey] = native
+        }
 
         L.newTable()
         L.pushString(instanceKey)
@@ -432,7 +436,7 @@ class TwineEngine {
                 ?: throw TwineError("module '$moduleName' not found")
 
             val compiler = LuauCompiler.builder()
-                .optimizationLevel(OptimizationLevel.BASELINE)
+                .optimizationLevel(OptimizationLevel.MAXIMUM)
                 .debugLevel(DebugLevel.NONE)
                 .mutableGlobals(natives.keys.toList())
                 .build()
@@ -485,6 +489,10 @@ class TwineEngine {
             val param = params[i]
             val type = param.type.classifier as? KClass<*>
 
+            if (type == Map::class && L.isTable(i + 1)) {
+                return@Array tableToMap(L, i + 1)
+            }
+
             if (param.isVararg) {
                 // Find where the varargs start in the stack
                 val varargStart = i + 1
@@ -523,16 +531,14 @@ class TwineEngine {
     }
 
     fun handleIndex(L: LuaState, instanceKey: String, key: String): Int {
-        val native = natives[instanceKey] ?: run { L.pushNil(); return 1 }
-        val tableName = native.resolvedName
+        val cache = nativeCache[instanceKey] ?: run { L.pushNil(); return 1 }
 
         if (key == "__twineName") {
-            L.pushString(tableName)
+            L.pushString(cache.native.resolvedName)
             return 1
         }
 
-        val functions = native.getFunctions().filter { it.first == key }
-        if (functions.isNotEmpty()) {
+        if (cache.functions.containsKey(key) || cache.functions.containsKey(key)) {
             L.newTable()
             L.pushString(instanceKey)
             L.setField(-2, "_inst")
@@ -545,10 +551,9 @@ class TwineEngine {
             return 1
         }
 
-        val prop = native.getProperties().find { it.first == key }?.second
+        val prop = cache.properties[key]
         if (prop != null) {
-            @Suppress("UNCHECKED_CAST")
-            val value = (prop as KProperty1<Any, *>).get(native)
+            val value = prop.get(cache.native)
             val returnType = prop.returnType.classifier as? KClass<*>
             LuaTypeResolver.push(L, value, returnType) { l, n -> pushNativeTable(l, n) }
             return 1
@@ -575,15 +580,15 @@ class TwineEngine {
     }
 
     fun handleCall(L: LuaState, instanceKey: String, funcName: String): Int {
-        val native = natives[instanceKey] ?: run { L.pushNil(); return 1 }
+        val cache = nativeCache[instanceKey] ?: return 0
 
-        val functions = native.getFunctions().filter { it.first == funcName }
-        if (functions.isEmpty()) { L.pushNil(); return 1 }
-
-        val funcs = functions.map { it.second }
+        val funcs = cache.functions[funcName] ?: run {
+            L.pushNil()
+            return 1
+        }
         val func = OverloadResolver.find(L, funcs, natives, funcName)
         val args = resolveArgs(L, func)
-        val result = func.call(native, *args)
+        val result = func.call(cache.native, *args)
         val returnType = func.returnType.classifier as? KClass<*>
         LuaTypeResolver.push(L, result, returnType) { l, n -> pushNativeTable(l, n) }
         return 1
