@@ -1,6 +1,7 @@
 package computer.obscure.twine
 
 import net.hollowcube.luau.LuaFunc
+import net.hollowcube.luau.LuaGcOp
 import net.hollowcube.luau.LuaState
 import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
@@ -594,5 +595,15 @@ class TwineEngine {
         val returnType = func.returnType.classifier as? KClass<*>
         LuaTypeResolver.push(L, result, returnType) { l, n -> pushNativeTable(l, n) }
         return 1
+    }
+
+    fun getStats(): TwineStats {
+        val runtime = Runtime.getRuntime()
+        return TwineStats(
+            luaMemoryKb = state.gc(LuaGcOp.COUNT, 0),
+            registeredNativesCount = natives.size,
+            cachedNativesCount = nativeCache.size,
+            jvmHeapUsedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+        )
     }
 }
