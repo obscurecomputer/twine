@@ -84,6 +84,45 @@ class LuaCallback(
         }
     }
 
+    fun call(vararg args: Any?): Any? {
+        val eng = engine.get() ?: throw IllegalStateException("Engine GCed")
+        if (eng.closed) throw IllegalStateException("Engine is closed")
+
+        synchronized(eng.stateLock) {
+            val L = eng.state
+            val initialTop = L.top()
+
+            try {
+                L.getGlobal("__twine_callbacks")
+                if (L.isNil(-1)) throw IllegalStateException("Callback registry not initialized")
+
+                L.pushInteger(key)
+                L.getTable(-2)
+                L.remove(-2)
+
+                if (L.isNil(-1)) throw IllegalStateException("Callback has been released")
+                if (!L.isFunction(-1)) throw IllegalStateException("Registry entry is not a function")
+
+                args.forEach { arg ->
+                    LuaTypeResolver.push(L, arg, arg?.let { it::class }) { innerL, native ->
+                        eng.pushNativeTable(innerL, native)
+                    }
+                }
+
+                L.call(args.size, 1)
+
+                return LuaTypeResolver.read(L, -1, null, emptyMap())
+
+            } catch (e: Exception) {
+                if (e is IllegalStateException) throw e
+                TwineLogger.error("Callback $key failed: ${e.message}")
+                return null
+            } finally {
+                L.top(initialTop)
+            }
+        }
+    }
+
     /**
      * Removes this function from the Luau registry.
      * * Once called, this [LuaCallback] instance can no longer be invoked and
