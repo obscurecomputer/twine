@@ -145,4 +145,138 @@ class TwineCallbackTest {
 
         assertEquals(listOf("pong"), output)
     }
+
+    @Test
+    fun `call returns single value`() {
+        lateinit var callback: LuaCallback
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun set(cb: LuaCallback) { callback = cb }
+        })
+
+        engine.run("""
+            t.set(function()
+                return 42.0
+            end)
+        """.trimIndent())
+
+        val result = callback.call<Double>()
+        assertEquals(42.0, result)
+    }
+
+    @Test
+    fun `call returns string value`() {
+        lateinit var callback: LuaCallback
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun set(cb: LuaCallback) { callback = cb }
+        })
+
+        engine.run("""
+            t.set(function()
+                return "hello"
+            end)
+        """.trimIndent())
+
+        val result = callback.call<String>()
+        assertEquals("hello", result)
+    }
+
+    @Test
+    fun `call returns computed value from argument`() {
+        lateinit var callback: LuaCallback
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun set(cb: LuaCallback) { callback = cb }
+        })
+
+        engine.run("""
+            t.set(function(x)
+                return x * 2
+            end)
+        """.trimIndent())
+
+        val result = callback.call<Double>(3.0)
+        assertEquals(6.0, result)
+    }
+
+    @Test
+    fun `call returns null for no return value`() {
+        lateinit var callback: LuaCallback
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun set(cb: LuaCallback) { callback = cb }
+        })
+
+        engine.run("""
+            t.set(function() end)
+        """.trimIndent())
+
+        val result = callback.call<Any?>()
+        assertEquals(null, result)
+    }
+
+    @Test
+    fun `callMulti returns multiple values`() {
+        lateinit var callback: LuaCallback
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun set(cb: LuaCallback) { callback = cb }
+        })
+
+        engine.run("""
+            t.set(function()
+                return "a", 5.0
+            end)
+        """.trimIndent())
+
+        val results = callback.call()
+        assertEquals(2, results.size)
+        assertEquals("a", results[0])
+        assertEquals(5.0, results[1])
+    }
+
+    @Test
+    fun `callMulti returns empty list for no return values`() {
+        lateinit var callback: LuaCallback
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun set(cb: LuaCallback) { callback = cb }
+        })
+
+        engine.run("""
+            t.set(function() end)
+        """.trimIndent())
+
+        val results = callback.call()
+        assertEquals(emptyList(), results)
+    }
+
+    @Test
+    fun `callMulti returns mixed types`() {
+        lateinit var callback: LuaCallback
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun set(cb: LuaCallback) { callback = cb }
+        })
+
+        engine.run("""
+            t.set(function()
+                return "name", 99.0, true
+            end)
+        """.trimIndent())
+
+        val results = callback.call()
+        assertEquals(3, results.size)
+        assertEquals("name", results[0])
+        assertEquals(99.0, results[1])
+        assertEquals(true, results[2])
+    }
 }

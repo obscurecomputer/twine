@@ -84,7 +84,13 @@ class LuaCallback(
         }
     }
 
-    fun call(vararg args: Any?): Any? {
+    fun <T> call(vararg args: Any?): T {
+        val value = call(*args)
+        if (value.isEmpty()) return null as T
+        return value.last() as T
+    }
+
+    fun call(vararg args: Any?): List<Any?> {
         val eng = engine.get() ?: throw IllegalStateException("Engine GCed")
         if (eng.closed) throw IllegalStateException("Engine is closed")
 
@@ -109,14 +115,17 @@ class LuaCallback(
                     }
                 }
 
-                L.call(args.size, 1)
+                L.call(args.size, -1)
 
-                return LuaTypeResolver.read(L, -1, null, emptyMap())
+                val returnCount = L.top() - initialTop
+                return (1..returnCount).map { i ->
+                    LuaTypeResolver.read(L, initialTop + i, null, emptyMap())
+                }
 
             } catch (e: Exception) {
                 if (e is IllegalStateException) throw e
                 TwineLogger.error("Callback $key failed: ${e.message}")
-                return null
+                return emptyList()
             } finally {
                 L.top(initialTop)
             }
