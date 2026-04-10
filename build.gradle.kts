@@ -7,25 +7,24 @@ group = "computer.obscure"
 version = "3.0.0"
 
 repositories {
+    mavenLocal()
     mavenCentral()
-    maven("https://jitpack.io")
+    maven("https://repo.znotchill.me/repository/maven-releases/")
 }
 
-val luauJavaVersion = "1.0.1-debug"
 dependencies {
     testImplementation(kotlin("test"))
     implementation("com.google.code.gson:gson:2.13.0")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     val luauVersion = "1.0.1"
-    val luauNativeVersion = "1.0.1-debug"
+    val luauNativeVersion = "1.0.1-patch2"
 
     implementation("dev.hollowcube:luau:$luauVersion")
-    implementation("dev.hollowcube:luau-natives-macos-x64:1.0.0")
 
-    val platforms = listOf("windows-x64", "linux-x64", "macos-arm64")
+    val platforms = listOf("windows-x64", "linux-x64", "macos-arm64", "macos-x64")
     platforms.forEach { platform ->
-        val dep = "dev.hollowcube:luau-natives-$platform:$luauNativeVersion"
+        val dep = "me.znotchill.luau:luau-natives-$platform:$luauNativeVersion"
         implementation(dep)
     }
 }
