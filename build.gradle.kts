@@ -1,28 +1,39 @@
 plugins {
     `maven-publish`
-    kotlin("jvm") version "2.1.10"
+    kotlin("jvm") version "2.3.0"
 }
 
 group = "computer.obscure"
-version = "2.3.4"
+version = "3.0.0"
 
 repositories {
+    mavenLocal()
     mavenCentral()
-    maven("https://jitpack.io")
+    maven("https://repo.znotchill.me/repository/maven-releases/")
 }
 
 dependencies {
     testImplementation(kotlin("test"))
-    implementation("org.luaj:luaj-jse:3.0.1")
     implementation("com.google.code.gson:gson:2.13.0")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+
+    val luauVersion = "1.0.1"
+    val luauNativeVersion = "1.0.1-patch2"
+
+    implementation("dev.hollowcube:luau:$luauVersion")
+
+    val platforms = listOf("windows-x64", "linux-x64", "macos-arm64", "macos-x64")
+    platforms.forEach { platform ->
+        val dep = "me.znotchill.luau:luau-natives-$platform:$luauNativeVersion"
+        implementation(dep)
+    }
 }
 
 tasks.test {
     useJUnitPlatform()
 }
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
 }
 
 publishing {
