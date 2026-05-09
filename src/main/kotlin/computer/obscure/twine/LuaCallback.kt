@@ -30,53 +30,37 @@ class LuaCallback(
         val eng = engine.get() ?: throw IllegalStateException("Engine GCed")
         if (eng.closed) throw IllegalStateException("Engine is closed")
 
-        // Lock the state so >2 threads don't push/pop at the same time
-        // and corrupt the stack
         synchronized(eng.stateLock) {
             val L = eng.state
-
-            // !! Save the current height of the stack so we can
-            // !! return to it later. Do NOT remove !!
             val initialTop = L.top()
+            val pin = eng.framePin.get()
+            val pinSizeBefore = pin.size
 
             try {
-                // Load the hidden global callback table
                 L.getGlobal("__twine_callbacks")
-                if (L.isNil(-1)) {
-                    throw IllegalStateException("Callback registry not initialized")
-                }
+                if (L.isNil(-1)) throw IllegalStateException("Callback registry not initialized")
 
-                // Push the key onto the stack
                 L.pushInteger(key)
-                // Pop the key, push the value found at the key
                 L.getTable(-2)
-                // Remove the registry table from the stack, leaving only the function at the top
                 L.remove(-2)
 
-                // Ensure what was fetched is actually a function and not nil
-                if (L.isNil(-1)) {
-                    throw IllegalStateException("Callback has been released")
-                }
-                if (!L.isFunction(-1)) {
-                    throw IllegalStateException("Registry entry is not a function")
-                }
+                if (L.isNil(-1)) throw IllegalStateException("Callback has been released")
+                if (!L.isFunction(-1)) throw IllegalStateException("Registry entry is not a function")
 
-                // Marshal Kotlin arguments into Lua arguments
                 args.forEach { arg ->
                     LuaTypeResolver.push(L, arg, arg?.let { it::class }) { innerL, native ->
-                        // If the arg is a TwineNative, wrap it in a proxy table so Lua can use it
                         eng.pushNativeTable(innerL, native)
                     }
                 }
 
-                // Call the function with the args pushed to the stack
-                // 0 = no expected results
                 L.call(args.size, 0)
 
             } catch (e: Exception) {
                 if (e is IllegalStateException) throw e
                 TwineLogger.error("Callback $key failed: ${e.message}")
             } finally {
+                while (pin.size > pinSizeBefore) pin.removeAt(pin.size - 1)
+
                 // !! Reset the stack pointer
                 // !! VERY IMPORTANT !! DO NOT REMOVE !!
                 L.top(initialTop)
@@ -97,6 +81,8 @@ class LuaCallback(
         synchronized(eng.stateLock) {
             val L = eng.state
             val initialTop = L.top()
+            val pin = eng.framePin.get()
+            val pinSizeBefore = pin.size
 
             try {
                 L.getGlobal("__twine_callbacks")
@@ -119,7 +105,7 @@ class LuaCallback(
 
                 val returnCount = L.top() - initialTop
                 return (1..returnCount).map { i ->
-                    LuaTypeResolver.read(L, initialTop + i, null, emptyMap())
+                    LuaTypeResolver.read(L, initialTop + i, null, eng.allNatives)
                 }
 
             } catch (e: Exception) {
@@ -127,6 +113,7 @@ class LuaCallback(
                 TwineLogger.error("Callback $key failed: ${e.message}")
                 return emptyList()
             } finally {
+                while (pin.size > pinSizeBefore) pin.removeAt(pin.size - 1)
                 L.top(initialTop)
             }
         }

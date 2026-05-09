@@ -7,10 +7,35 @@ import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
 import net.hollowcube.luau.compiler.OptimizationLevel
 import java.lang.ref.WeakReference
-import java.util.WeakHashMap
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.collections.AbstractMap
+import kotlin.collections.Map
+import kotlin.collections.MutableList
+import kotlin.collections.MutableMap
+import kotlin.collections.Set
+import kotlin.collections.component1
+import kotlin.collections.component2
+import kotlin.collections.drop
+import kotlin.collections.filter
+import kotlin.collections.find
+import kotlin.collections.firstOrNull
+import kotlin.collections.forEach
+import kotlin.collections.getOrPut
+import kotlin.collections.groupBy
+import kotlin.collections.isEmpty
+import kotlin.collections.isNotEmpty
+import kotlin.collections.iterator
+import kotlin.collections.map
+import kotlin.collections.mutableListOf
+import kotlin.collections.mutableMapOf
+import kotlin.collections.plus
+import kotlin.collections.set
+import kotlin.collections.toList
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
+import kotlin.reflect.KMutableProperty1
 import kotlin.reflect.KProperty1
 
 /**
@@ -24,14 +49,26 @@ class TwineEngine {
     var closed = false
         private set
     val stateLock = Any()
-    private val nativeCache: MutableMap<TwineNative, NativeCache> = WeakHashMap()
+    private val nativeCache: MutableMap<KClass<out TwineNative>, NativeCache> = ConcurrentHashMap()
 
     val state: LuaState = LuaState.newState()
 
     /**
      * Global registry of Kotlin objects exposed to the Lua VM
      */
-    val natives: MutableMap<String, TwineNative> = ConcurrentHashMap()
+    val namedNatives: MutableMap<String, TwineNative> = ConcurrentHashMap()
+    private val proxyNatives: MutableMap<String, TwineNative> = ConcurrentHashMap()
+    val allNatives: Map<String, TwineNative> = object : AbstractMap<String, TwineNative>() {
+        override val entries: Set<Map.Entry<String, TwineNative>>
+            get() = namedNatives.entries + proxyNatives.entries
+        override fun get(key: String) = namedNatives[key] ?: proxyNatives[key]
+        override val size get() = namedNatives.size + proxyNatives.size
+        override fun containsKey(key: String) = namedNatives.containsKey(key) || proxyNatives.containsKey(key)
+    }
+
+    private val pushCount = AtomicInteger(0)
+
+    val framePin: ThreadLocal<MutableList<TwineNative>> = ThreadLocal.withInitial { mutableListOf() }
 
     /**
      * Custom handlers to rewrite some error messages in a more intuitive form
@@ -81,7 +118,8 @@ class TwineEngine {
      */
     fun close() {
         closed = true
-        natives.clear()
+        namedNatives.clear()
+        proxyNatives.clear()
         nativeCache.clear()
         state.close()
     }
@@ -93,6 +131,7 @@ class TwineEngine {
      */
     fun register(native: TwineNative) {
         if (closed) return
+        namedNatives[native.resolvedName] = native
         pushNativeTable(state, native)
         state.setGlobal(native.resolvedName)
     }
@@ -107,7 +146,7 @@ class TwineEngine {
         if (closed) return
         val values = enum.getValues()
 
-        values.forEach { natives[it.resolvedName] = it }
+        values.forEach { namedNatives[it.resolvedName] = it }
 
         state.newTable()
         state.pushString(enum.resolvedName)
@@ -138,7 +177,7 @@ class TwineEngine {
         for ((name, funcs) in functions) {
             L.pushFunction(
                 LuaFunc.wrap({ innerL: LuaState ->
-                    val func = OverloadResolver.find(innerL, funcs, natives, name)
+                    val func = OverloadResolver.find(innerL, funcs, namedNatives, name)
                     val args = resolveArgs(innerL, func)
                     val result = func.call(native, *args)
                     val returnType = func.returnType.classifier as? KClass<*>
@@ -242,7 +281,7 @@ class TwineEngine {
             .optimizationLevel(OptimizationLevel.MAXIMUM)
             .debugLevel(DebugLevel.NONE)
             // Tell the compiler that these names change and to not cache them
-            .mutableGlobals(natives.keys.toList())
+            .mutableGlobals(allNatives.keys.toList())
             .build()
 
         val bytecode = try {
@@ -297,7 +336,7 @@ class TwineEngine {
             }
 
             return try {
-                LuaTypeResolver.read(thread, top, Any::class, natives)
+                LuaTypeResolver.read(thread, top, Any::class, allNatives)
             } catch (e: Exception) {
                 TwineLogger.error("Failed to marshal return value for $name: ${e.message}")
                 null
@@ -329,7 +368,7 @@ class TwineEngine {
 
         if (isNative) {
             // If it's a Kotlin object, unwrap it
-            return LuaTypeResolver.read(L, absoluteIndex, Any::class, natives)
+            return LuaTypeResolver.read(L, absoluteIndex, Any::class, allNatives)
         }
 
         val map = mutableMapOf<Any?, Any?>()
@@ -343,7 +382,7 @@ class TwineEngine {
             val key = try {
                 // If the key is a string or a number, convert
                 if (L.isString(-2) || L.isNumber(-2)) {
-                    LuaTypeResolver.read(L, -2, Any::class, natives)
+                    LuaTypeResolver.read(L, -2, Any::class, allNatives)
                 } else {
                     // If the key is strange, label it by its type
                     "__lua_key_" + L.typeName(-2)
@@ -359,7 +398,7 @@ class TwineEngine {
 
                 // Handle other primitives
                 else -> try {
-                    LuaTypeResolver.read(L, -1, Any::class, natives)
+                    LuaTypeResolver.read(L, -1, Any::class, allNatives)
                 } catch (_: Exception) { "{Unreadable}" }
             }
 
@@ -382,10 +421,14 @@ class TwineEngine {
      */
     fun pushNativeTable(L: LuaState, native: TwineNative) {
         val instanceKey = "native@${System.identityHashCode(native)}"
-        if (!nativeCache.containsKey(native)) {
-            nativeCache[native] = NativeCache(native)
+        nativeCache.getOrPut(native::class) { NativeCache(native::class, native) }
+
+        proxyNatives[instanceKey] = native
+        if (pushCount.incrementAndGet() >= 1000) {
+            pushCount.set(0)
+            pruneProxies()
         }
-        natives[instanceKey] = native
+        framePin.get().add(native)
 
         L.newTable()
         L.pushString(instanceKey)
@@ -396,6 +439,7 @@ class TwineEngine {
         L.setField(-2, "__index")
         L.pushFunction(SHARED_NEWINDEX_FUNC)
         L.setField(-2, "__newindex")
+
         L.setMetaTable(-2)
     }
 
@@ -439,7 +483,7 @@ class TwineEngine {
             val compiler = LuauCompiler.builder()
                 .optimizationLevel(OptimizationLevel.MAXIMUM)
                 .debugLevel(DebugLevel.NONE)
-                .mutableGlobals(natives.keys.toList())
+                .mutableGlobals(namedNatives.keys.toList())
                 .build()
             val bytecode = compiler.compile(source)
 
@@ -506,7 +550,7 @@ class TwineEngine {
                 val array = java.lang.reflect.Array.newInstance(componentType.java, varargCount)
                 for (j in 0 until varargCount) {
                     // Read the value from Lua and convert it to the Kotlin component type
-                    val value = LuaTypeResolver.read(L, varargStart + j, componentType, natives, engineRef)
+                    val value = LuaTypeResolver.read(L, varargStart + j, componentType, allNatives, engineRef)
                     // Put the value in the array
                     java.lang.reflect.Array.set(array, j, value)
                 }
@@ -516,7 +560,7 @@ class TwineEngine {
             } else {
                 // If it is a standard parameter, just do a normal
                 // 1:1 mapping
-                LuaTypeResolver.read(L, i + 1, type, natives, engineRef)
+                LuaTypeResolver.read(L, i + 1, type, allNatives, engineRef)
             }
         }
     }
@@ -532,15 +576,15 @@ class TwineEngine {
     }
 
     fun handleIndex(L: LuaState, instanceKey: String, key: String): Int {
-        val native = natives[instanceKey] ?: run { L.pushNil(); return 1 }
-        val cache = nativeCache[native] ?: run { L.pushNil(); return 1 }
+        val native = resolveNative(instanceKey) ?: run { L.pushNil(); return 1 }
+        val cache = nativeCache[native::class] ?: run { L.pushNil(); return 1 }
 
         if (key == "__twineName") {
-            L.pushString(cache.native.resolvedName)
+            L.pushString(native.resolvedName)
             return 1
         }
 
-        if (cache.functions.containsKey(key) || cache.functions.containsKey(key)) {
+        if (cache.functions.containsKey(key)) {
             L.newTable()
             L.pushString(instanceKey)
             L.setField(-2, "_inst")
@@ -555,7 +599,7 @@ class TwineEngine {
 
         val prop = cache.properties[key]
         if (prop != null) {
-            val value = prop.get(cache.native)
+            val value = prop.get(native)
             val returnType = prop.returnType.classifier as? KClass<*>
             LuaTypeResolver.push(L, value, returnType) { l, n -> pushNativeTable(l, n) }
             return 1
@@ -566,14 +610,14 @@ class TwineEngine {
     }
 
     fun handleNewIndex(L: LuaState, instanceKey: String, key: String): Int {
-        val native = natives[instanceKey] ?: return 0
+        val native = resolveNative(instanceKey) ?: return 0
 
         val prop = native.getProperties().find { it.first == key }?.second
-        if (prop is kotlin.reflect.KMutableProperty1<*, *>) {
+        if (prop is KMutableProperty1<*, *>) {
             val valueType = prop.returnType.classifier as? KClass<*>
-            val newValue = LuaTypeResolver.read(L, 3, valueType, natives)
+            val newValue = LuaTypeResolver.read(L, 3, valueType, allNatives)
             @Suppress("UNCHECKED_CAST")
-            (prop as kotlin.reflect.KMutableProperty1<Any, Any?>).set(native, newValue)
+            (prop as KMutableProperty1<Any, Any?>).set(native, newValue)
             return 0
         }
 
@@ -582,16 +626,13 @@ class TwineEngine {
     }
 
     fun handleCall(L: LuaState, instanceKey: String, funcName: String): Int {
-        val native = natives[instanceKey] ?: run { L.pushNil(); return 1 }
-        val cache = nativeCache[native] ?: run { L.pushNil(); return 1 }
+        val native = resolveNative(instanceKey) ?: run { L.pushNil(); return 1 }
+        val cache = nativeCache[native::class] ?: run { L.pushNil(); return 1 }
 
-        val funcs = cache.functions[funcName] ?: run {
-            L.pushNil()
-            return 1
-        }
-        val func = OverloadResolver.find(L, funcs, natives, funcName)
+        val funcs = cache.functions[funcName] ?: run { L.pushNil(); return 1 }
+        val func = OverloadResolver.find(L, funcs, allNatives, funcName)
         val args = resolveArgs(L, func)
-        val result = func.call(cache.native, *args)
+        val result = func.call(native, *args)
         val returnType = func.returnType.classifier as? KClass<*>
         LuaTypeResolver.push(L, result, returnType) { l, n -> pushNativeTable(l, n) }
         return 1
@@ -601,9 +642,22 @@ class TwineEngine {
         val runtime = Runtime.getRuntime()
         return TwineStats(
             luaMemoryKb = state.gc(LuaGcOp.COUNT, 0),
-            registeredNativesCount = natives.size,
+            registeredNativesCount = namedNatives.size,
             cachedNativesCount = nativeCache.size,
             jvmHeapUsedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
         )
+    }
+
+    private fun resolveNative(instanceKey: String): TwineNative? {
+        return namedNatives[instanceKey] ?: proxyNatives[instanceKey]
+    }
+
+    private fun pruneProxies() {
+        val weakCheck: MutableMap<TwineNative, String> = WeakHashMap()
+        proxyNatives.forEach { (k, v) -> weakCheck[v] = k }
+        val dead = proxyNatives.entries
+            .filter { (key, value) -> !weakCheck.containsKey(value) }
+            .map { it.key }
+        dead.forEach { proxyNatives.remove(it) }
     }
 }

@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "computer.obscure"
-version = "3.0.0"
+version = "3.1.0"
 
 repositories {
     mavenLocal()
@@ -21,6 +21,7 @@ dependencies {
     val luauNativeVersion = "1.0.1-patch2"
 
     implementation("dev.hollowcube:luau:$luauVersion")
+    implementation("com.google.guava:guava:33.2.1-jre")
 
     val platforms = listOf("windows-x64", "linux-x64", "macos-arm64", "macos-x64")
     platforms.forEach { platform ->
