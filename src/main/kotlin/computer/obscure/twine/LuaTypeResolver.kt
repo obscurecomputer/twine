@@ -22,6 +22,8 @@ object LuaTypeResolver {
      * @return True if the Lua value can be converted to the Kotlin type.
      */
     fun matches(L: LuaState, index: Int, type: KClass<*>?, natives: Map<String, TwineNative>): Boolean {
+        if (L.isNil(index)) return true
+
         return when {
             type == String::class -> L.isString(index)
             type == Double::class || type == Float::class -> L.isNumber(index)
@@ -49,6 +51,10 @@ object LuaTypeResolver {
         natives: Map<String, TwineNative>,
         engine: WeakReference<TwineEngine>? = null
     ): Any? {
+        // !! MAJOR PATCH !!
+        // if the stack value is nil, return Kotlin null IMMEDIATELY!!!
+
+        if (L.isNil(index)) return null
         return when {
             type == String::class -> L.checkString(index)
             type == Int::class -> L.checkInteger(index)
