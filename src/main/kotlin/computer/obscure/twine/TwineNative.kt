@@ -13,7 +13,7 @@ import kotlin.reflect.full.memberProperties
  * * Classes extending [TwineNative] can use [@TwineFunction] and [@TwineProperty]
  * annotations to mark specific members for export.
  *
- * @property valueName An optional custom name for this object in the Lua global scope.
+ * @property valueName An optional custom name for this object in the Luau global scope.
  * If left empty, it defaults to the lowercase simple name of the class.
  */
 open class TwineNative(
@@ -30,7 +30,7 @@ open class TwineNative(
     companion object {
         /**
          * A constant value used in annotations to indicate that the
-         * Lua name should be identical to the Kotlin simple name.
+         * Luau name should be identical to the Kotlin simple name.
          */
         const val INHERIT_TAG = "INHERIT_FROM_DEFINITION"
     }
@@ -38,7 +38,7 @@ open class TwineNative(
     /**
      * Scans the class using reflection to find all functions annotated with [TwineFunction].
      *
-     * @return A list of pairs mapping the Lua function name to the [KFunction] handle.
+     * @return A list of pairs mapping the Luau function name to the [KFunction] handle.
      */
     fun getFunctions(): List<Pair<String, KFunction<*>>> {
         return this::class.functions
@@ -53,7 +53,7 @@ open class TwineNative(
     /**
      * Scans the class using reflection to find all properties annotated with [TwineProperty].
      *
-     * @return A list of pairs mapping the Lua property name to the [KProperty] handle.
+     * @return A list of pairs mapping the Luau property name to the [KProperty] handle.
      */
     fun getProperties(): List<Pair<String, KProperty<*>>> {
         return this::class.memberProperties

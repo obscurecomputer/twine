@@ -67,7 +67,7 @@ class TwineEnum(private val enum: KClass<*>) : TwineNative(enum.java.simpleName)
 
         /**
          * Extension function to convert a specific Enum instance into a [TwineEnumValue].
-         * This is used when returning an enum value from Kotlin to Lua.
+         * This is used when returning an enum value from Kotlin to Luau.
          * @return A [TwineEnumValue] data transfer object.
          */
         fun Enum<*>.toTwineValue() = TwineEnumValue(

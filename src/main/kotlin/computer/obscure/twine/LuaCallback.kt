@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A wrapper for Luau functions that allows Kotlin to safely call
- * Lua callbacks across JNI.
+ * Luau callbacks across JNI.
  *
  * This class handles the persistence of the function within Luau's VM's
  * global state to prevent GC while the callback is active.
@@ -25,7 +25,7 @@ class LuaCallback(
     /**
      * Executes the wrapped Luau function with the provided arguments.
      *
-     * @param args The parameters to pass to the Lua function. Supports null, Strings, Numbers,
+     * @param args The parameters to pass to the Luau function. Supports null, Strings, Numbers,
      * Booleans, Maps, and [TwineNative]s.
      * @throws IllegalStateException If the function has been released or is no longer valid.
      */
@@ -150,7 +150,7 @@ class LuaCallback(
          * protected registry to prevent it being GCed.
          *
          * @param state The current [LuaState].
-         * @param index The stack index where the Lua function is located.
+         * @param index The stack index where the Luau function is located.
          * @param engine A [WeakReference] containing the [TwineEngine].
          * @return A [LuaCallback] instance that can trigger the function later.
          */
