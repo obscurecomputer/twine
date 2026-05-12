@@ -13,15 +13,15 @@ import kotlin.reflect.KFunction
 object OverloadResolver {
 
     /**
-     * Examines the Lua stack and finds the first function in [overloads] that
+     * Examines the Luau stack and finds the first function in [overloads] that
      * matches the types and count of the provided arguments.
      *
-     * @param L The current Lua state.
+     * @param L The current Luau state.
      * @param overloads A list of Kotlin functions with the same name.
      * @param natives A registry of known [TwineNative] objects for type checking.
      * @param funcName The name of the function.
      * @return The matching [KFunction].
-     * @throws IllegalStateException If no function signature matches the Lua arguments.
+     * @throws IllegalStateException If no function signature matches the Luau arguments.
      */
     fun find(
         L: LuaState,
@@ -95,7 +95,7 @@ object OverloadResolver {
     }
 
     /**
-     * Internal logic to check if a specific [KFunction] is compatible with the Lua stack.
+     * Internal logic to check if a specific [KFunction] is compatible with the Luau stack.
      *
      * @param L The current [LuaState].
      * @param func The Kotlin function to test against.

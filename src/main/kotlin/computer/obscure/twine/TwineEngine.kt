@@ -54,7 +54,7 @@ class TwineEngine {
     val state: LuaState = LuaState.newState()
 
     /**
-     * Global registry of Kotlin objects exposed to the Lua VM
+     * Global registry of Kotlin objects exposed to the Luau VM
      */
     val namedNatives: MutableMap<String, TwineNative> = ConcurrentHashMap()
     private val proxyNatives: MutableMap<String, TwineNative> = ConcurrentHashMap()
@@ -125,9 +125,9 @@ class TwineEngine {
     }
 
     /**
-     * Exposes a [TwineNative] instance as a global variable in the Lua environment.
+     * Exposes a [TwineNative] instance as a global variable in the Luau environment.
      *
-     * @param native The Kotlin object instance to expose to Lua.
+     * @param native The Kotlin object instance to expose to Luau.
      */
     fun register(native: TwineNative) {
         if (closed) return
@@ -137,7 +137,7 @@ class TwineEngine {
     }
 
     /**
-     * Registers a [TwineEnum], creating a global table in Lua containing
+     * Registers a [TwineEnum], creating a global table in Luau containing
      * all enum constants as nested tables.
      *
      * @param enum The Twine representation of a Kotlin Enum.
@@ -171,7 +171,7 @@ class TwineEngine {
         val L = state
         L.getGlobal("_G")
 
-        // Map Kotlin functions to global Lua functions
+        // Map Kotlin functions to global Luau functions
         val functions = native.getFunctions().groupBy({ it.first }, { it.second })
 
         for ((name, funcs) in functions) {
@@ -354,7 +354,7 @@ class TwineEngine {
     }
 
     /**
-     * Recursively converts a Lua table into a Kotlin Map.
+     * Recursively converts a Luau table into a Kotlin Map.
      * Also detects if a table is actually a Proxy or a Native object.
      */
     fun tableToMap(L: LuaState, index: Int): Any? {
@@ -392,7 +392,7 @@ class TwineEngine {
             val value = when {
                 // If the value is a table, recurse and convert it to a Map.
                 L.isTable(-1) -> tableToMap(L, -1)
-                // If Lua passed a function, capture it so Kotlin can call it later
+                // If Luau passed a function, capture it so Kotlin can call it later
                 // as a LuaCallback.
                 L.isFunction(-1) -> captureCallback(L, -1)
 
@@ -445,7 +445,7 @@ class TwineEngine {
 
     /**
      * Enables the "require" module in the Luau VM.
-     * * Mimics the standard Lua "require" behavior:
+     * * Mimics the standard Luau "require" behavior:
      * * Checks `package.loaded` cache to see if the script already ran
      * * If not, use a Kotlin callback to fetch the source code from a list of loaded scripts
      * * Compile, execute, and cache
@@ -546,7 +546,7 @@ class TwineEngine {
             if (param.isVararg) {
                 // Find where the varargs start in the stack
                 val varargStart = i + 1
-                // Calculate how many extra arguments Lua provided for this vararg.
+                // Calculate how many extra arguments Luau provided for this vararg.
                 val varargCount = (argCount - varargStart + 1).coerceAtLeast(0)
 
                 // Get the component type (if vararg is String, component is String)
@@ -554,7 +554,7 @@ class TwineEngine {
 
                 val array = java.lang.reflect.Array.newInstance(componentType.java, varargCount)
                 for (j in 0 until varargCount) {
-                    // Read the value from Lua and convert it to the Kotlin component type
+                    // Read the value from Luau and convert it to the Kotlin component type
                     val value = LuaTypeResolver.read(L, varargStart + j, componentType, allNatives, engineRef)
                     // Put the value in the array
                     java.lang.reflect.Array.set(array, j, value)
@@ -570,7 +570,7 @@ class TwineEngine {
         }
     }
     /**
-     * Captures a Lua function from the stack and anchors it into a [LuaCallback].
+     * Captures a Luau function from the stack and anchors it into a [LuaCallback].
      *
      * @param L The current LuaState where the function lives.
      * @param index The stack position of the function to capture (-1 for the top).

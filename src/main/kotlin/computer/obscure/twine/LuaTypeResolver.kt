@@ -8,18 +8,18 @@ import kotlin.reflect.full.isSubclassOf
 
 /**
  * A utility object responsible for marshalling data between Kotlin and Luau.
- * * Handles type checking, conversion from Lua stack values to Kotlin objects,
- * and pushing Kotlin values onto the Lua stack.
+ * * Handles type checking, conversion from Luau stack values to Kotlin objects,
+ * and pushing Kotlin values onto the Luau stack.
  */
 object LuaTypeResolver {
     /**
-     * Verifies if the value at the given Lua stack [index] matches the expected Kotlin [type].
+     * Verifies if the value at the given Luau stack [index] matches the expected Kotlin [type].
      *
-     * @param L The current Lua state.
+     * @param L The current Luau state.
      * @param index The position on the stack to check.
      * @param type The target Kotlin class.
      * @param natives A registry of known [TwineNative] objects.
-     * @return True if the Lua value can be converted to the Kotlin type.
+     * @return True if the Luau value can be converted to the Kotlin type.
      */
     fun matches(L: LuaState, index: Int, type: KClass<*>?, natives: Map<String, TwineNative>): Boolean {
         if (L.isNil(index)) return true
@@ -39,7 +39,7 @@ object LuaTypeResolver {
     }
 
     /**
-     * Converts a Lua value at [index] into a Kotlin object of the specified [type].
+     * Converts a Luau value at [index] into a Kotlin object of the specified [type].
      *
      * @throws IllegalStateException If the type is a native object and no matching registration exists.
      * @return The converted Kotlin object, or null.
@@ -79,9 +79,9 @@ object LuaTypeResolver {
     }
 
     /**
-     * Pushes a Kotlin [value] onto the Lua stack.
+     * Pushes a Kotlin [value] onto the Luau stack.
      *
-     * @param L The current Lua state.
+     * @param L The current Luau state.
      * @param value The object to push.
      * @param type Optional type hint for the value.
      * @param pushTable A lambda to handle pushing [TwineNative] objects (usually creates a proxied table).
@@ -153,7 +153,7 @@ object LuaTypeResolver {
     }
 
     /**
-     * Extracts a [TwineNative] from a Lua table by looking up the `__twineName` field.
+     * Extracts a [TwineNative] from a Luau table by looking up the `__twineName` field.
      *
      * @param L The current [LuaState].
      * @param index The stack index where the Luau table is located.
@@ -173,7 +173,7 @@ object LuaTypeResolver {
     }
 
     /**
-     * Wraps a Lua function at [index] into a [LuaCallback] for later invocation by Kotlin.
+     * Wraps a Luau function at [index] into a [LuaCallback] for later invocation by Kotlin.
      * @param L The current [LuaState].
      * @param index The stack index where the Luau function resides.
      * @return A [LuaCallback] handle that can be invoked from Kotlin later.
