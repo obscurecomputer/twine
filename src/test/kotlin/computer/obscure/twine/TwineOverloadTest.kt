@@ -144,4 +144,93 @@ class TwineOverloadTest {
         val result = engine.runSafe("t.check(nil)")
         assertTrue(result.isFailure)
     }
+
+    // NULLABLE / OPTIONAL TRAILING PARAMS
+    @Test
+    fun `resolves overload with trailing nullable param omitted`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun fov(to: Float, duration: Double, easing: String, onFinish: LuaCallback?) = "fov:$to,$duration,$easing,${onFinish == null}"
+        })
+
+        engine.run("""
+        capture.record(t.fov(90, 1.0, "linear"))
+    """.trimIndent())
+
+        assertEquals(listOf("fov:90.0,1.0,linear,true"), output)
+    }
+
+    @Test
+    fun `resolves overload with trailing nullable param as nil`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun fov(to: Float, duration: Double, easing: String, onFinish: LuaCallback?) = "fov:${onFinish == null}"
+        })
+
+        engine.run("""
+        capture.record(t.fov(90, 1.0, "linear", nil))
+    """.trimIndent())
+
+        assertEquals(listOf("fov:true"), output)
+    }
+
+    @Test
+    fun `resolves overload with trailing nullable param provided`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun fov(to: Float, duration: Double, easing: String, onFinish: LuaCallback?) = "fov:${onFinish != null}"
+        })
+
+        engine.run("""
+        capture.record(t.fov(90, 1.0, "linear", function() end))
+    """.trimIndent())
+
+        assertEquals(listOf("fov:true"), output)
+    }
+
+    @Test
+    fun `prefers non-nullable overload over nullable when both match`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun action(a: String) = "required"
+
+            @TwineFunction
+            fun action(a: String, b: String?) = "nullable"
+        })
+
+        engine.run("""
+        capture.record(t.action("hello"))
+    """.trimIndent())
+
+        // exact match (1 arg) should win over nullable with missing arg
+        assertEquals(listOf("required"), output)
+    }
+
+    @Test
+    fun `throws on missing required argument`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun move(x: Double, y: Double) = "$x,$y"
+        })
+
+        val result = engine.runSafe("t.move(1.0)")
+        assertTrue(result.isFailure)
+        val error = result.exceptionOrNull() as TwineError
+        assertTrue(error.message!!.contains("No matching overload found for: move(Number)"))
+    }
+
+    @Test
+    fun `multiple trailing nullables all omitted`() {
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun animate(duration: Double, easing: String?, onStart: LuaCallback?, onFinish: LuaCallback?) =
+                "animate:$duration,${easing == null},${onStart == null},${onFinish == null}"
+        })
+
+        engine.run("""
+        capture.record(t.animate(2.0))
+    """.trimIndent())
+
+        assertEquals(listOf("animate:2.0,true,true,true"), output)
+    }
 }

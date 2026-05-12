@@ -44,18 +44,27 @@ object OverloadResolver {
             val isVararg = params.lastOrNull()?.isVararg == true
             val fixedParamCount = if (isVararg) params.size - 1 else params.size
 
+            // Count required params (non-nullable, non-optional, non-vararg)
+            val requiredCount = params.count { p ->
+                !p.isVararg && !p.type.isMarkedNullable && !p.isOptional
+            }
+
             // Not enough arguments
-            if (argCount < fixedParamCount) return@find false
-            // Too many arguments (and no vararg to catch them)
-            if (!isVararg && argCount != fixedParamCount) return@find false
+            if (argCount < requiredCount) return@find false
+            // More args than the function can accept
+            if (!isVararg && argCount > fixedParamCount) return@find false
 
             // Check types for each argument
             for (i in 0 until argCount) {
                 // Skip type checking for varargs here or handle specifically
                 if (i >= fixedParamCount && isVararg) break
 
-                val paramType = params[i].type.classifier as? KClass<*>
+                val param = params[i]
+                val paramType = param.type.classifier as? KClass<*>
                 val luaType = L.type(i + 1)
+
+                // nil is valid for nullable params, so pass
+                if (luaType == LuaType.NIL && param.type.isMarkedNullable) continue
 
                 val isMatch = when {
                     paramType == Map::class -> luaType == LuaType.TABLE

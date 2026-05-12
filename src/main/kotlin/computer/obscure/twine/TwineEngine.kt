@@ -534,6 +534,11 @@ class TwineEngine {
             val param = params[i]
             val type = param.type.classifier as? KClass<*>
 
+            if (i + 1 > argCount) {
+                return@Array if (param.type.isMarkedNullable || param.isOptional) null
+                else throw TwineError("Missing required argument '${param.name}' at position ${i + 1}")
+            }
+
             if (type == Map::class && L.isTable(i + 1)) {
                 return@Array tableToMap(L, i + 1)
             }
