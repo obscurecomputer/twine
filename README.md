@@ -1,7 +1,7 @@
 
 <p align="center">
     <picture>
-        <img src="assets/twine-logomark.svg" alt="Twine Logomark" width="500">
+        <img src="assets/twine-logomark.svg" alt="Twine Logomark" height="256">
     </picture>
 </p>
 
