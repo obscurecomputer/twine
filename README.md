@@ -1,10 +1,22 @@
-# Twine 🧵
 
-**A framework that sits on-top of LuaJ to provide a better developer experience**
+<p align="center">
+    <picture>
+        <img src="assets/twine-logomark.svg" alt="Twine Logomark" width="500">
+    </picture>
+</p>
+
+<p align="center">
+    <img src="assets/kotlin.svg" alt="" width="144">
+    <a href="https://discord.gg/DeTbNe6UyY">
+        <img src="assets/discord.svg" alt="" width="192">
+    </a>
+</p>
+
+**Twine** is a framework that sits on-top of Luau to provide a better developer experience!
 
 ## Features
 
-- **Write your code in Kotlin** - Our API natively supports Kotlin to write LuaJ functions
+- **Write your code in Kotlin** - Our API natively supports Kotlin to write Luau functions
 
 ## Usage
 ```kt
@@ -12,7 +24,7 @@ repositories {
     maven("https://repo.obscure.computer/repository/maven-releases/")
 }
 dependencies {
-    implementation("computer.obscure:twine:2.3.4")
+    implementation("computer.obscure:twine:3.1.1")
 }
 ```
 
