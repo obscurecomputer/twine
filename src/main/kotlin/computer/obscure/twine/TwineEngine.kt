@@ -543,6 +543,10 @@ class TwineEngine {
                 return@Array tableToMap(L, i + 1)
             }
 
+            if (type == Any::class && L.isTable(i + 1)) {
+                return@Array tableToMap(L, i + 1)
+            }
+
             if (param.isVararg) {
                 // Find where the varargs start in the stack
                 val varargStart = i + 1

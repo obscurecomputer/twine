@@ -279,4 +279,76 @@ class TwineCallbackTest {
         assertEquals(99.0, results[1])
         assertEquals(true, results[2])
     }
+
+    @Test
+    fun `any parameter receives lua string`() {
+        var received: Any? = null
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun send(id: String, data: Any) {
+                received = data
+            }
+        })
+
+        engine.run("""t.send("test", "hello")""")
+
+        assertEquals("hello", received)
+    }
+
+    @Test
+    fun `any parameter receives lua number`() {
+        var received: Any? = null
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun send(id: String, data: Any) {
+                received = data
+            }
+        })
+
+        engine.run("""t.send("test", 42)""")
+
+        assertEquals(42.0, received)
+    }
+
+    @Test
+    fun `any parameter receives lua boolean`() {
+        var received: Any? = null
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun send(id: String, data: Any) {
+                received = data
+            }
+        })
+
+        engine.run("""t.send("test", true)""")
+
+        assertEquals(true, received)
+    }
+
+    @Test
+    fun `any parameter receives lua table as map`() {
+        var received: Any? = null
+
+        engine.register(object : TwineNative("t") {
+            @TwineFunction
+            fun send(id: String, data: Any) {
+                received = data
+            }
+        })
+
+        engine.run("""
+            t.send("test", {
+                key = "value",
+                number = 42
+            })
+        """.trimIndent())
+
+        assert(received is Map<*, *>) { "Expected Map but got ${received?.javaClass}" }
+        val map = received as Map<*, *>
+        assertEquals("value", map["key"])
+        assertEquals(42.0, map["number"])
+    }
 }
