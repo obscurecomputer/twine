@@ -343,11 +343,6 @@ class TwineEngine {
         val absoluteIndex = if (index < 0)
             L.top() + index + 1
         else index
-
-        if (L.isUserData(absoluteIndex)) {
-            return L.toUserDataTagged(absoluteIndex, 1) as? TwineNative
-        }
-
         val map = mutableMapOf<Any?, Any?>()
 
         // Starting point for L.next()

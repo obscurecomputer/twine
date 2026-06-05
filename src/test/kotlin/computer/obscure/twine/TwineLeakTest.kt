@@ -31,7 +31,6 @@ class TwineLeakTest {
         val liveProxies = engine.proxyNatives.values.count {
             it.get() != null
         }
-        println("Live proxies after GC: $liveProxies")
         assertTrue(liveProxies == 0 || liveProxies < 10000, "Native objects were not collected")
 
         engine.close()
