@@ -36,9 +36,6 @@ class LuaCallback(
         synchronized(eng.stateLock) {
             val L = eng.state
             val initialTop = L.top()
-            val pin = eng.framePin.get()
-            val pinSizeBefore = pin.size
-
             try {
                 L.getGlobal("__twine_callbacks")
                 if (L.isNil(-1)) throw IllegalStateException("Callback registry not initialized")
@@ -62,8 +59,6 @@ class LuaCallback(
                 if (e is IllegalStateException) throw e
                 TwineLogger.error("Internal Failure in $this: ${e.message}")
             } finally {
-                while (pin.size > pinSizeBefore) pin.removeAt(pin.size - 1)
-
                 // !! Reset the stack pointer
                 // !! VERY IMPORTANT !! DO NOT REMOVE !!
                 L.top(initialTop)
@@ -84,9 +79,6 @@ class LuaCallback(
         synchronized(eng.stateLock) {
             val L = eng.state
             val initialTop = L.top()
-            val pin = eng.framePin.get()
-            val pinSizeBefore = pin.size
-
             try {
                 L.getGlobal("__twine_callbacks")
                 if (L.isNil(-1)) throw IllegalStateException("Callback registry not initialized")
@@ -116,8 +108,6 @@ class LuaCallback(
                 TwineLogger.error("$this failed: ${e.message}")
                 return emptyList()
             } finally {
-                while (pin.size > pinSizeBefore) pin.removeAt(pin.size - 1)
-
                 // !! Reset the stack pointer
                 // !! VERY IMPORTANT !! DO NOT REMOVE !!
                 L.top(initialTop)

@@ -29,6 +29,9 @@ object LuaTypeResolver {
             type == Double::class || type == Float::class -> L.isNumber(index)
             type == Boolean::class -> L.isBoolean(index)
 
+            type != null && type.isSubclassOf(TwineNative::class) ->
+                L.isTable(index) || L.isUserData(index)
+
             // Enums are represented as strings in Luau
             type != null && type.java.isEnum -> L.isString(index)
             type != null && type.isSubclassOf(TwineNative::class) -> L.isTable(index)
@@ -162,6 +165,9 @@ object LuaTypeResolver {
      * @throws IllegalStateException If the `__twineName` is missing or not registered.
      */
     private fun readNative(L: LuaState, index: Int, natives: Map<String, TwineNative>): TwineNative? {
+        if (L.isUserData(index)) {
+            return L.toUserDataTagged(index, 1) as? TwineNative
+        }
         L.getField(index, "__twineName")
         if (L.isNil(-1)) {
             L.pop(1)
