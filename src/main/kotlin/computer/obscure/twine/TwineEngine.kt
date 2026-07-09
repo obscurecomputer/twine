@@ -1,5 +1,6 @@
 package computer.obscure.twine
 
+import net.hollowcube.luau.LuaError
 import net.hollowcube.luau.LuaFunc
 import net.hollowcube.luau.LuaGcOp
 import net.hollowcube.luau.LuaState
@@ -7,6 +8,7 @@ import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
 import net.hollowcube.luau.compiler.OptimizationLevel
 import java.lang.ref.WeakReference
+import java.lang.reflect.InvocationTargetException
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -250,13 +252,36 @@ class TwineEngine {
         return try {
             Result.success(runUnsafe(name, script, env))
         } catch (e: Exception) {
-            val rawMessage = e.message ?: "Unknown error"
-            val newMessage = errorHandlers
-                .firstOrNull { (regex, _) -> regex.containsMatchIn(rawMessage) }
-                ?.let { (regex, handler) -> handler(regex.find(rawMessage)!!, name, rawMessage) }
-                ?: rawMessage
-            Result.failure(TwineError(newMessage))
+            val cause = unwrapException(e)
+
+            TwineLogger.error(
+                "Script '$name' failed: ${cause::class.simpleName}: ${cause.message}"
+            )
+
+            Result.failure(
+                TwineError("${cause::class.simpleName}: ${cause.message}")
+            )
         }
+    }
+
+    private fun unwrapException(t: Throwable): Throwable {
+        var current = t
+
+        while (true) {
+            current = when {
+                current is InvocationTargetException &&
+                        current.targetException != null ->
+                    current.targetException
+
+                current is LuaError &&
+                        current.cause != null ->
+                    current.cause!!
+
+                else -> break
+            }
+        }
+
+        return current
     }
 
     /**
@@ -641,7 +666,17 @@ class TwineEngine {
         val funcs = cache.functions[funcName] ?: run { L.pushNil(); return 1 }
         val func = OverloadResolver.find(L, funcs, allNatives, funcName)
         val args = resolveArgs(L, func)
-        val result = func.call(native, *args)
+        val result = try {
+            func.call(native, *args)
+        } catch (e: Throwable) {
+            val cause = if (e is InvocationTargetException) {
+                e.targetException ?: e
+            } else {
+                e.cause ?: e
+            }
+
+            throw cause
+        }
         val returnType = func.returnType.classifier as? KClass<*>
         LuaTypeResolver.push(L, result, returnType) { l, n -> pushNativeTable(l, n) }
         return 1
