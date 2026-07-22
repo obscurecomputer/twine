@@ -48,18 +48,8 @@ kotlin {
 }
 
 publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            from(components["java"])
-
-            group
-            artifactId = "twine"
-            version
-        }
-    }
-
     repositories {
-	maven {
+        maven {
             name = "obscurerepo"
             url = uri("https://repo.obscure.computer/repository/maven-releases/")
             credentials {
@@ -67,7 +57,6 @@ publishing {
                 password = findProperty("obscurePassword") as String? ?: System.getenv("OBSCURE_MAVEN_PASS")
             }
         }
-
         mavenLocal()
     }
 }
