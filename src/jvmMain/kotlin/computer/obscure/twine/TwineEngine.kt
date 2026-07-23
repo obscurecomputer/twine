@@ -1,5 +1,6 @@
 package computer.obscure.twine
 
+import computer.obscure.twine.resolvers.TwineBindingResolver
 import net.hollowcube.luau.LuaError
 import net.hollowcube.luau.LuaFunc
 import net.hollowcube.luau.LuaGcOp
@@ -78,6 +79,23 @@ class TwineEngine {
     private val errorHandlers: MutableList<Pair<Regex, (MatchResult, String, String) -> String>> = mutableListOf()
 
     var moduleLoader: ((name: String) -> String?)? = null
+
+    private val resolvers = mutableListOf<TwineBindingResolver>()
+
+    fun addResolver(resolver: TwineBindingResolver) {
+        resolvers += resolver
+    }
+
+    fun resolveFunctions(instance: Any) =
+        resolvers
+            .filter { it.supports(instance::class) }
+            .flatMap { it.functions(instance) }
+
+    fun resolveProperties(instance: Any) =
+        resolvers
+            .filter { it.supports(instance::class) }
+            .flatMap { it.properties(instance) }
+
 
     private val SHARED_INDEX_FUNC = LuaFunc.wrap({ L ->
         L.getField(1, "__twineName")
@@ -446,7 +464,7 @@ class TwineEngine {
      */
     fun pushNativeTable(L: LuaState, native: TwineNative) {
         val instanceKey = "native@${System.identityHashCode(native)}"
-        nativeCache.getOrPut(native::class) { NativeCache(native::class, native) }
+        nativeCache.getOrPut(native::class) { NativeCache(native::class, native, this) }
 
         proxyNatives[instanceKey] = native
         if (pushCount.incrementAndGet() >= 1000) {
