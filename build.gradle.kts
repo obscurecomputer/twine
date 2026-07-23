@@ -11,7 +11,7 @@ version = "3.1.5"
 repositories {
     mavenLocal()
     mavenCentral()
-    maven("https://repo.znotchill.me/repository/maven-releases/")
+    maven("https://repo.znotchill.me/releases/")
 }
 
 kotlin {
