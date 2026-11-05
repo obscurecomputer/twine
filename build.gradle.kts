@@ -1,62 +1,34 @@
-
 plugins {
-    `maven-publish`
-    alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.kotlinMultiplatform) apply false
+    alias(libs.plugins.kotlinJvm) apply false
+    alias(libs.plugins.kotlinSerialization) apply false
 }
 
-group = "computer.obscure"
-version = "3.1.5"
+allprojects {
+    group = "computer.obscure.twine"
+    version = "3.1.6"
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-    maven("https://repo.znotchill.me/releases/")
-}
-
-kotlin {
-    jvm()
-
-    macosArm64()
-    linuxArm64()
-    linuxX64()
-    mingwX64()
-
-    jvmToolchain(25)
-
-    sourceSets {
-        commonMain.dependencies {
-            implementation(libs.kotlinx.serialization.json)
-        }
-        jvmMain.dependencies {
-            implementation("com.google.code.gson:gson:2.13.0")
-            implementation("org.jetbrains.kotlin:kotlin-reflect")
-
-            val luauVersion = "1.0.1"
-            val luauNativeVersion = "1.0.1-patch2"
-
-            implementation("dev.hollowcube:luau:$luauVersion")
-            implementation("com.google.guava:guava:33.2.1-jre")
-
-            val platforms = listOf("windows-x64", "linux-x64", "macos-arm64", "macos-x64")
-            platforms.forEach { platform ->
-                val dep = "me.znotchill.luau:luau-natives-$platform:$luauNativeVersion"
-                implementation(dep)
-            }
-        }
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven("https://repo.znotchill.me/releases/")
     }
 }
 
-publishing {
-    repositories {
-        maven {
-            name = "obscurerepo"
-            url = uri("https://repo.obscure.computer/repository/maven-releases/")
-            credentials {
-                username = findProperty("obscureUsername") as String? ?: System.getenv("OBSCURE_MAVEN_USER")
-                password = findProperty("obscurePassword") as String? ?: System.getenv("OBSCURE_MAVEN_PASS")
+subprojects {
+    apply(plugin = "maven-publish")
+
+    configure<PublishingExtension> {
+        repositories {
+            maven {
+                name = "obscurerepo"
+                url = uri("https://repo.obscure.computer/repository/maven-releases/")
+                credentials {
+                    username = findProperty("obscureUsername") as String? ?: System.getenv("OBSCURE_MAVEN_USER")
+                    password = findProperty("obscurePassword") as String? ?: System.getenv("OBSCURE_MAVEN_PASS")
+                }
             }
+            mavenLocal()
         }
-        mavenLocal()
     }
 }
