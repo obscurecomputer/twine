@@ -8,8 +8,8 @@ kotlin {
     jvmToolchain(25)
 }
 
-val luauVersion = "1.0.1"
-val luauNativeVersion = "1.0.1-patch2"
+val luauVersion = "1.2.1"
+val luauNativeVersion = "1.2.1"
 
 dependencies {
     testImplementation(kotlin("test"))
@@ -24,7 +24,7 @@ dependencies {
     testImplementation("dev.hollowcube:luau:$luauVersion")
 
     listOf("windows-x64", "linux-x64", "macos-arm64", "macos-x64").forEach { platform ->
-        val natives = "me.znotchill.luau:luau-natives-$platform:$luauNativeVersion"
+        val natives = "dev.hollowcube:luau-natives-$platform:$luauNativeVersion"
         compileOnly(natives)
         testRuntimeOnly(natives)
     }
