@@ -75,10 +75,6 @@ class TwineEngine {
         override fun containsKey(key: String) = namedNatives.containsKey(key) || proxyNatives.containsKey(key)
     }
 
-    private val pushCount = AtomicInteger(0)
-
-    val framePin: ThreadLocal<MutableList<TwineNative>> = ThreadLocal.withInitial { mutableListOf() }
-
     /**
      * Custom handlers to rewrite some error messages in a more intuitive form
      */
