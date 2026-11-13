@@ -8,34 +8,17 @@ import net.hollowcube.luau.LuaState
 import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
 import net.hollowcube.luau.compiler.OptimizationLevel
+import net.hollowcube.luau.internal.vm.`luaW_newuserdatadtor$dtor`
+import net.hollowcube.luau.internal.vm.lua_h
+import net.hollowcube.luau.internal.vm.luaujava_h
+import java.lang.foreign.*
 import java.lang.ref.WeakReference
 import java.lang.reflect.InvocationTargetException
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.AbstractMap
-import kotlin.collections.Map
-import kotlin.collections.MutableList
-import kotlin.collections.MutableMap
-import kotlin.collections.Set
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.collections.drop
-import kotlin.collections.filter
-import kotlin.collections.find
-import kotlin.collections.firstOrNull
-import kotlin.collections.forEach
-import kotlin.collections.getOrPut
-import kotlin.collections.groupBy
-import kotlin.collections.isEmpty
-import kotlin.collections.isNotEmpty
-import kotlin.collections.iterator
-import kotlin.collections.map
-import kotlin.collections.mutableListOf
-import kotlin.collections.mutableMapOf
-import kotlin.collections.plus
-import kotlin.collections.set
-import kotlin.collections.toList
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KMutableProperty1
@@ -56,6 +39,29 @@ class TwineEngine {
 
     val state: LuaState = LuaState.newState()
 
+    private val proxyRefs = ConcurrentHashMap<String, Int>()
+    private val keyById = ConcurrentHashMap<Long, String>()
+    val nextId = AtomicLong()
+
+    val dtorStub: MemorySegment = `luaW_newuserdatadtor$dtor`.allocate(
+        { ptr ->
+            try {
+                val id = ptr.reinterpret(8).get(ValueLayout.JAVA_LONG, 0)
+                val key = keyById.remove(id) ?: return@allocate
+                proxyRefs.compute(key) { _, count ->
+                    if (count == null || count <= 1) {
+//                        println("$ptr REF'D BY $count, SO REMOVE. ${getStats()}")
+                        proxyNatives.remove(key)
+                        null
+                    } else count - 1
+                }
+            } catch (t: Throwable) {
+                t.printStackTrace()
+            }
+        },
+        Arena.global()
+    )
+
     /**
      * Global registry of Kotlin objects exposed to the Luau VM
      */
@@ -68,10 +74,6 @@ class TwineEngine {
         override val size get() = namedNatives.size + proxyNatives.size
         override fun containsKey(key: String) = namedNatives.containsKey(key) || proxyNatives.containsKey(key)
     }
-
-    private val pushCount = AtomicInteger(0)
-
-    val framePin: ThreadLocal<MutableList<TwineNative>> = ThreadLocal.withInitial { mutableListOf() }
 
     /**
      * Custom handlers to rewrite some error messages in a more intuitive form
@@ -467,22 +469,26 @@ class TwineEngine {
         nativeCache.getOrPut(native::class) { NativeCache(native::class, native, this) }
 
         proxyNatives[instanceKey] = native
-        if (pushCount.incrementAndGet() >= 1000) {
-            pushCount.set(0)
-            pruneProxies()
-        }
-        framePin.get().add(native)
+        proxyRefs.merge(instanceKey, 1, Int::plus)
 
         L.newTable()
         L.pushString(instanceKey)
         L.setField(-2, "__twineName")
 
-        L.newTable()
+        L.newTable() // metatable
         L.pushFunction(SHARED_INDEX_FUNC)
         L.setField(-2, "__index")
         L.pushFunction(SHARED_NEWINDEX_FUNC)
         L.setField(-2, "__newindex")
 
+        val id = nextId.incrementAndGet()
+        keyById[id] = instanceKey
+
+        // TODO: https://github.com/hollow-cube/luau-java/blob/9b87e6e7904a0696bf0e437756fe22d70cacf21b/src/main/java/net/hollowcube/luau/LuaState.java#L66
+        val block = luaujava_h.luaW_newuserdatadtor(L.L(), 8L, dtorStub).reinterpret(8)
+        block.set(ValueLayout.JAVA_LONG, 0, id)
+
+        L.setField(-2, "__gcsentinel")
         L.setMetaTable(-2)
     }
 
