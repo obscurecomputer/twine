@@ -9,14 +9,14 @@ import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
 import net.hollowcube.luau.compiler.OptimizationLevel
 import net.hollowcube.luau.internal.vm.`luaW_newuserdatadtor$dtor`
-import net.hollowcube.luau.internal.vm.lua_h
 import net.hollowcube.luau.internal.vm.luaujava_h
-import java.lang.foreign.*
+import java.lang.foreign.Arena
+import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
 import java.lang.ref.WeakReference
 import java.lang.reflect.InvocationTargetException
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.AbstractMap
 import kotlin.reflect.KClass
@@ -50,7 +50,7 @@ class TwineEngine {
                 val key = keyById.remove(id) ?: return@allocate
                 proxyRefs.compute(key) { _, count ->
                     if (count == null || count <= 1) {
-//                        println("$ptr REF'D BY $count, SO REMOVE. ${getStats()}")
+                        //println("$ptr REF'D BY $count, SO REMOVE. ${getStats()}")
                         proxyNatives.remove(key)
                         null
                     } else count - 1
@@ -618,7 +618,11 @@ class TwineEngine {
             } else {
                 // If it is a standard parameter, just do a normal
                 // 1:1 mapping
-                LuaTypeResolver.read(L, i + 1, type, allNatives, engineRef)
+                val value = LuaTypeResolver.read(L, i + 1, type, allNatives, engineRef)
+                if (value == null && !param.type.isMarkedNullable) {
+                    throw TwineError("Argument #${i + 1} '${param.name}' expected ${type?.simpleName}, got nil")
+                }
+                value
             }
         }
     }
@@ -690,8 +694,18 @@ class TwineEngine {
         val funcs = cache.functions[funcName] ?: run { L.pushNil(); return 1 }
         val func = OverloadResolver.find(L, funcs, allNatives, funcName)
         val args = resolveArgs(L, func)
+
         val result = try {
             func.call(native, *args)
+        } catch (e: IllegalArgumentException) {
+            val params = func.parameters.drop(1)
+            val detail = params.indices.joinToString("\n") { i ->
+                val expected = (params[i].type.classifier as? KClass<*>)?.java?.name
+                    ?: params[i].type.toString()
+                val actual = args.getOrNull(i)?.javaClass?.name ?: "nil"
+                " - #${i + 1} '${params[i].name}': expected $expected, got $actual"
+            }
+            throw TwineError("Bad arguments for ${func.name}:\n$detail")
         } catch (e: Throwable) {
             val cause = if (e is InvocationTargetException) {
                 e.targetException ?: e

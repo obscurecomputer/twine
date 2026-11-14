@@ -22,16 +22,20 @@ object LuaTypeResolver {
      * @return True if the Luau value can be converted to the Kotlin type.
      */
     fun matches(L: LuaState, index: Int, type: KClass<*>?, natives: Map<String, TwineNative>): Boolean {
-        if (L.isNil(index)) return true
-
         return when {
             type == String::class -> L.isString(index)
             type == Double::class || type == Float::class -> L.isNumber(index)
             type == Boolean::class -> L.isBoolean(index)
-
-            // Enums are represented as strings in Luau
             type != null && type.java.isEnum -> L.isString(index)
-            type != null && type.isSubclassOf(TwineNative::class) -> L.isTable(index)
+            type != null && type.isSubclassOf(TwineNative::class) -> {
+                if (!L.isTable(index)) return false
+                L.getField(index, "__twineName")
+                val name = if (L.isString(-1)) L.checkString(-1) else null
+                L.pop(1)
+                name != null && natives[name]?.let {
+                    type.isInstance(it)
+                } == true
+            }
             type == Any::class -> true
             type == LuaCallback::class -> L.isFunction(index)
             else -> false

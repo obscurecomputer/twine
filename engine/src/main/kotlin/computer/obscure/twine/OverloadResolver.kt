@@ -5,6 +5,7 @@ import net.hollowcube.luau.LuaState
 import net.hollowcube.luau.LuaType
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
+import kotlin.reflect.full.isSubclassOf
 
 /**
  * Utility for selecting the correct Kotlin function overload based on
@@ -124,7 +125,6 @@ object OverloadResolver {
         }
     }
 
-    private fun isNumeric(type: KClass<*>?): Boolean {
-        return type == Int::class || type == Double::class || type == Float::class || type == Long::class || type == Byte::class || type == Short::class
-    }
+    private fun isNumeric(type: KClass<*>?): Boolean =
+        type != null && type.isSubclassOf(Number::class)
 }
