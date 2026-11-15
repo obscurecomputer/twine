@@ -199,7 +199,7 @@ class TwineEngine {
         for ((name, funcs) in functions) {
             L.pushFunction(
                 LuaFunc.wrap({ innerL: LuaState ->
-                    val func = OverloadResolver.find(innerL, funcs, namedNatives, name)
+                    val func = OverloadResolver.find(innerL, funcs, allNatives, name)
                     val args = resolveArgs(innerL, func)
                     val result = func.call(native, *args)
                     val returnType = func.returnType.classifier as? KClass<*>
@@ -676,6 +676,9 @@ class TwineEngine {
 
         val prop = native.getProperties().find { it.first == key }?.second
         if (prop is KMutableProperty1<*, *>) {
+            LuaTypeResolver.check(L, 3, prop.returnType, allNatives)?.let { mismatch ->
+                throw TwineError("bad value for property '$key' ($mismatch)")
+            }
             val valueType = prop.returnType.classifier as? KClass<*>
             val newValue = LuaTypeResolver.read(L, 3, valueType, allNatives)
             @Suppress("UNCHECKED_CAST")
