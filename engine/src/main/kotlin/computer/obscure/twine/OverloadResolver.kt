@@ -2,10 +2,8 @@ package computer.obscure.twine
 
 import computer.obscure.twine.utils.getSignature
 import net.hollowcube.luau.LuaState
-import net.hollowcube.luau.LuaType
-import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
-import kotlin.reflect.full.isSubclassOf
+import kotlin.reflect.KType
 
 /**
  * Utility for selecting the correct Kotlin function overload based on
@@ -22,7 +20,7 @@ object OverloadResolver {
      * @param natives A registry of known [TwineNative] objects for type checking.
      * @param funcName The name of the function.
      * @return The matching [KFunction].
-     * @throws IllegalStateException If no function signature matches the Luau arguments.
+     * @throws TwineError If no function signature matches the Luau arguments.
      */
     fun find(
         L: LuaState,
@@ -34,48 +32,16 @@ object OverloadResolver {
 
         if (overloads.size == 1) {
             val f = overloads[0]
-            val params = f.parameters.drop(1)
-            if (params.size == argCount || (params.lastOrNull()?.isVararg == true)) {
+            if (acceptsCount(f, argCount)) {
+                firstMismatch(L, f, argCount, natives)?.let { (position, mismatch) ->
+                    throw TwineError("bad argument #$position to '$funcName' ($mismatch)")
+                }
                 return f
             }
         }
 
         val match = overloads.find { func ->
-            val params = func.parameters.drop(1)
-            val isVararg = params.lastOrNull()?.isVararg == true
-            val fixedParamCount = if (isVararg) params.size - 1 else params.size
-
-            // Count required params (non-nullable, non-optional, non-vararg)
-            val requiredCount = params.count { p ->
-                !p.isVararg && !p.type.isMarkedNullable && !p.isOptional
-            }
-
-            // Not enough arguments
-            if (argCount < requiredCount) return@find false
-            // More args than the function can accept
-            if (!isVararg && argCount > fixedParamCount) return@find false
-
-            // Check types for each argument
-            for (i in 0 until argCount) {
-                // Skip type checking for varargs here or handle specifically
-                if (i >= fixedParamCount && isVararg) break
-
-                val param = params[i]
-                val paramType = param.type.classifier as? KClass<*>
-                val luaType = L.type(i + 1)
-
-                // nil is valid for nullable params, so pass
-                if (luaType == LuaType.NIL && param.type.isMarkedNullable) continue
-
-                val isMatch = when {
-                    paramType == Map::class -> luaType == LuaType.TABLE
-                    paramType == List::class -> luaType == LuaType.TABLE
-                    isNumeric(paramType) -> luaType == LuaType.NUMBER
-                    else -> LuaTypeResolver.matches(L, i + 1, paramType, natives)
-                }
-                if (!isMatch) return@find false
-            }
-            true
+            acceptsCount(func, argCount) && firstMismatch(L, func, argCount, natives) == null
         }
 
         if (match != null) return match
@@ -95,36 +61,41 @@ object OverloadResolver {
         )
     }
 
-    /**
-     * Internal logic to check if a specific [KFunction] is compatible with the Luau stack.
-     *
-     * @param L The current [LuaState].
-     * @param func The Kotlin function to test against.
-     * @param argCount The number of arguments passed from Luau in the current call.
-     * @param natives The registry of known [TwineNative] objects for type validation.
-     * @return `true` if the Luau arguments can be safely converted into the Kotlin parameter types.
-     */
-    private fun matches(L: LuaState, func: KFunction<*>, argCount: Int, natives: Map<String, TwineNative>): Boolean {
+    private fun acceptsCount(func: KFunction<*>, argCount: Int): Boolean {
         // drop(1) because the first parameter in reflection for
         // instance methods is usually just the instance itself ("this")
         val params = func.parameters.drop(1)
         val isVararg = params.lastOrNull()?.isVararg == true
-        val fixedCount = if (isVararg) params.size - 1 else params.size
+        val fixedParamCount = if (isVararg) params.size - 1 else params.size
 
-        // Not enough arguments
-        if (argCount < fixedCount) return false
-        // Too many arguments (and no vararg to catch them)
-        if (!isVararg && argCount != fixedCount) return false
-
-        return params.take(fixedCount).withIndex().all { (i, param) ->
-            val type = param.type.classifier as? KClass<*>
-
-            // Reuse LuaTypeResolver to see if the stack value at the index can be
-            // marshalled into the Kotlin type.
-            LuaTypeResolver.matches(L, i + 1, type, natives)
+        val requiredCount = params.count { p ->
+            !p.isVararg && !p.type.isMarkedNullable && !p.isOptional
         }
+
+        return argCount >= requiredCount && (isVararg || argCount <= fixedParamCount)
     }
 
-    private fun isNumeric(type: KClass<*>?): Boolean =
-        type != null && type.isSubclassOf(Number::class)
+    private fun firstMismatch(
+        L: LuaState,
+        func: KFunction<*>,
+        argCount: Int,
+        natives: Map<String, TwineNative>
+    ): Pair<Int, LuaTypeResolver.TypeMismatch>? {
+        val params = func.parameters.drop(1)
+        val isVararg = params.lastOrNull()?.isVararg == true
+        val fixedParamCount = if (isVararg) params.size - 1 else params.size
+
+        for (i in 0 until argCount) {
+            val type: KType? = if (i < fixedParamCount) {
+                params[i].type
+            } else {
+                params.last().type.arguments.firstOrNull()?.type
+            }
+            if (type == null) continue
+
+            val mismatch = LuaTypeResolver.check(L, i + 1, type, natives)
+            if (mismatch != null) return (i + 1) to mismatch
+        }
+        return null
+    }
 }
