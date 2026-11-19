@@ -24,7 +24,7 @@ object LuaValueReader {
             Byte::class.javaObjectType -> state.checkNumber(index).toInt().toByte()
             Double::class.javaObjectType -> state.checkNumber(index)
             Float::class.javaObjectType -> state.checkNumber(index).toFloat()
-            Boolean::class.javaObjectType -> state.toBoolean(index)
+            Boolean::class.javaObjectType -> state.checkBoolean(index)
 
             else -> when {
                 type?.let { TwineNative::class.java.isAssignableFrom(it) } == true ->
@@ -33,12 +33,37 @@ object LuaValueReader {
                 type?.isEnum == true ->
                     readEnum(state, index, type)
 
-                state.isNumber(index) -> state.checkNumber(index)
-                state.isBoolean(index) -> state.toBoolean(index)
-                state.isTable(index) -> readNative(state, index, context, environment)
-                else -> state.checkString(index)
+                Map::class.java.isAssignableFrom(type) ->
+                    readTable(state, index, context, environment)
+
+                type?.isInterface == true && isNativeTable(state, index) ->
+                    readNative(state, index, context, environment)
+
+                else -> readAny(state, index, context, environment)
             }
         }
+    }
+
+    fun readTable(
+        state: LuaState,
+        index: Int,
+        context: TwineContext,
+        environment: TwineEnvironment
+    ): Map<Any?, Any?> {
+        val result = mutableMapOf<Any?, Any?>()
+        val tableIndex = state.absIndex(index)
+
+        state.pushNil()
+
+        while (state.next(tableIndex)) {
+            val key = readAny(state, -2, context, environment)
+            val value = readAny(state, -1, context, environment)
+
+            result[key] = value
+            state.pop(1)
+        }
+
+        return result
     }
 
     private fun readNative(
@@ -47,17 +72,18 @@ object LuaValueReader {
         context: TwineContext,
         environment: TwineEnvironment
     ): TwineNative {
-        state.getField(index, "__twineName")
+        state.getField(index, "__twineId")
 
-        val name = try {
+        val id = try {
             state.checkString(-1)
         } finally {
             state.pop(1)
         }
 
-        return environment.registry[name]
-            ?: context.registry[name]
-            ?: error("No native registered with name '$name'")
+        return environment.registry[id]
+            ?: environment.runtimeRegistry[id]
+            ?: context.registry[id]
+            ?: error("No native registered with ID '$id'")
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -71,5 +97,30 @@ object LuaValueReader {
             type as Class<out Enum<*>>,
             name
         )
+    }
+
+    private fun isNativeTable(state: LuaState, index: Int): Boolean {
+        state.getField(index, "__twineId")
+        return try {
+            state.isString(-1)
+        } finally {
+            state.pop(1)
+        }
+    }
+
+    private fun readAny(
+        state: LuaState,
+        index: Int,
+        context: TwineContext,
+        environment: TwineEnvironment
+    ): Any? {
+        return when {
+            state.isNil(index) -> null
+            state.isBoolean(index) -> state.toBoolean(index)
+            state.isNumber(index) -> state.checkNumber(index)
+            state.isString(index) -> state.checkString(index)
+            state.isTable(index) -> readTable(state, index, context, environment)
+            else -> state.checkString(index)
+        }
     }
 }

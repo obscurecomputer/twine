@@ -22,6 +22,8 @@ open class TwineNative(
     val resolvedName: String
         get() = valueName.ifEmpty { this::class.simpleName!!.lowercase() }
 
+    var internalId: String? = null
+
     companion object {
         /**
          * A constant value used in annotations to indicate that the

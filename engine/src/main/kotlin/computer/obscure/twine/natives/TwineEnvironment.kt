@@ -5,5 +5,7 @@ import java.util.UUID
 
 class TwineEnvironment {
     val uuid = UUID.randomUUID()
+
     val registry = TwineNativeRegistry()
+    val runtimeRegistry = TwineNativeRegistry()
 }

@@ -3,6 +3,9 @@ package computer.obscure.twine.natives
 import computer.obscure.twine.TwineNative
 import computer.obscure.twine.annotations.TwineFunction
 import computer.obscure.twine.annotations.TwineProperty
+import computer.obscure.twine.exceptions.TwineException
+import computer.obscure.twine.exceptions.TwineExecutionException
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
@@ -46,7 +49,7 @@ class BoundFunction(val name: String, val function: KFunction<*>) {
 
     val isVararg = params.lastOrNull()?.isVararg == true
     val fixedCount = if (isVararg) params.size - 1 else params.size
-    val required = params.count { !it.isVararg && !it.nullable && !it.optional }
+    val required = params.count { !it.isVararg && !it.optional }
 
     val returnClass: Class<*>? =
         (function.returnType.classifier as? KClass<*>)?.javaObjectType
@@ -61,9 +64,63 @@ class BoundFunction(val name: String, val function: KFunction<*>) {
         if (i < fixedCount) params[i].type else params.lastOrNull()?.elementType
 
     fun call(target: Any, args: Array<Any?>): Any? {
-        val m = method ?: return function.call(target, *args)
-        val result = m.invoke(target, *args)
-        return if (returnsUnit) Unit else result
+        val m = method ?: return try {
+            function.call(target, *args)
+        } catch (e: Throwable) {
+            throw TwineExecutionException(name, e)
+        }
+
+        return try {
+            m.invoke(target, *args)
+        } catch (e: InvocationTargetException) {
+            throw TwineExecutionException(name, e.targetException)
+        } catch (e: IllegalArgumentException) {
+            val details = describeArgumentErrors(args)
+
+            throw TwineException(
+                "Failed to invoke $name:\n$details",
+                e
+            )
+        } catch (e: ReflectiveOperationException) {
+            throw TwineException(
+                "Could not invoke $name: ${e.message}",
+                e
+            )
+        }
+    }
+
+    fun getSignature(): String {
+        val parameters = params.joinToString(", ") { param ->
+            val name = param.name ?: "arg"
+            val type = param.type.toString()
+            when {
+                param.isVararg -> "vararg $name: ${param.elementType}"
+                param.optional -> "$name: $type = ..."
+                else -> "$name: $type"
+            }
+        }
+
+        return "($parameters): ${function.returnType}"
+    }
+
+    private fun describeArgumentErrors(args: Array<Any?>): String {
+        return params.mapIndexedNotNull { i, param ->
+            val value = args.getOrNull(i)
+            val expected = param.type.toString()
+            val actual = value?.javaClass?.simpleName ?: "nil"
+
+            val valid = when {
+                value == null -> param.nullable || param.optional
+                param.klass == null -> true
+                else -> param.klass.isInstance(value)
+            }
+
+            if (valid) null
+            else buildString {
+                append("  #${i + 1} '${param.name ?: "arg"}': ")
+                append("expected $expected, got $actual")
+            }
+        }.joinToString("\n")
     }
 }
 

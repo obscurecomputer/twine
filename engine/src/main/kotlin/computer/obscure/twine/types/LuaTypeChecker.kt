@@ -30,6 +30,7 @@ object LuaTypeChecker {
         val number = luaType == LuaType.NUMBER || luaType == LuaType.INTEGER
 
         return when (type) {
+            Any::class.java -> true
             String::class.java -> luaType == LuaType.STRING
             Boolean::class.javaObjectType -> luaType == LuaType.BOOLEAN
 
@@ -62,7 +63,7 @@ object LuaTypeChecker {
                         List::class.java.isAssignableFrom(type) ->
                     luaType == LuaType.TABLE
 
-                TwineNative::class.java.isAssignableFrom(type) ->
+                TwineNative::class.java.isAssignableFrom(type) || type.isInterface ->
                     luaType == LuaType.TABLE
 
                 else -> false

@@ -1,6 +1,6 @@
 package computer.obscure.twine.engine
 
-import computer.obscure.twine.TwineError
+import computer.obscure.twine.exceptions.TwineException
 import computer.obscure.twine.TwineNative
 import computer.obscure.twine.annotations.TwineFunction
 import computer.obscure.twine.annotations.TwineProperty
@@ -10,7 +10,9 @@ import computer.obscure.twine.types.LuaValueReader
 import computer.obscure.twine.types.LuaValueWriter
 import net.hollowcube.luau.LuaFunc
 import net.hollowcube.luau.LuaState
+import net.hollowcube.luau.compiler.DebugLevel
 import net.hollowcube.luau.compiler.LuauCompiler
+import net.hollowcube.luau.compiler.OptimizationLevel
 
 /**
  * The main entry point for the Twine Luau integration.
@@ -31,42 +33,30 @@ class TwineEngine(
         state.openLibs()
     }
 
-    private fun resolveNative(name: String, env: TwineEnvironment = globalEnvironment): TwineNative {
-        return env.registry[name]
-            ?: globalEnvironment.registry[name]
-            ?: context.registry[name]
-            ?: throw TwineError("Unknown native '$name'")
-    }
+    private fun resolveNative(env: TwineEnvironment, key: String) =
+        env.registry[key] ?: env.runtimeRegistry[key]
+
+    private fun resolveClassModel(env: TwineEnvironment, key: String) =
+        env.registry.getClassModel(key) ?: env.runtimeRegistry.getClassModel(key)
 
     private val SHARED_INDEX_FUNC = LuaFunc.wrap({ L ->
-//        val getTime = System.nanoTime()
-        L.getField(1, "__twineName")
-        val instanceKey = L.checkString(-1); L.pop(1)
+        L.getField(1, "__twineId")
+        val id = L.checkString(-1); L.pop(1)
         L.getField(1, "__twineEnv")
         val environment = L.checkString(-1); L.pop(1)
 
         val key = L.checkString(2)
 
-//        println("got instance, env, key in ${System.nanoTime() - getTime}nanos")
-//
-//        val getEnvTime = System.nanoTime()
         val env = environments[environment] ?: return@wrap 0
-//        println("got env from engine ${System.nanoTime() - getEnvTime}nanos")
-//
-//        val getNativeTime = System.nanoTime()
-        val native = env.registry[instanceKey] ?: return@wrap 0
-//        println("got native from env ${System.nanoTime() - getNativeTime}nanos")
-//
-//        val getCMTime = System.nanoTime()
-        val classModel = env.registry.getClassModel(instanceKey) ?: return@wrap 0
-//        println("got cm from env ${System.nanoTime() - getCMTime}nanos")
+        val native = resolveNative(env, id) ?: return@wrap 0
+        val classModel = resolveClassModel(env, id) ?: return@wrap 0
 
-        handleIndex(L, env, native, classModel, key)
+        handleIndex(L, env, native, classModel, id, key)
     }, "__index")
 
     private val SHARED_NEWINDEX_FUNC = LuaFunc.wrap({ L ->
-        L.getField(1, "__twineName")
-        val instanceKey = L.checkString(-1)
+        L.getField(1, "__twineId")
+        val id = L.checkString(-1)
         L.pop(1)
 
         L.getField(1, "__twineEnv")
@@ -74,15 +64,16 @@ class TwineEngine(
         L.pop(1)
 
         val env = environments[environment] ?: return@wrap 0
-        val native = env.registry[instanceKey] ?: return@wrap 0
-        val classModel = env.registry.getClassModel(instanceKey) ?: return@wrap 0
+        val native = resolveNative(env, id) ?: return@wrap 0
+        val classModel = resolveClassModel(env, id) ?: return@wrap 0
+        val key = L.checkString(2)
 
-        handleNewIndex(L, native, classModel)
+        handleNewIndex(L, env, native, classModel, key)
     }, "__newindex")
 
     private val SHARED_CALL_FUNC = LuaFunc.wrap({ L ->
-        L.getField(1, "__twineName")
-        val instanceKey = L.checkString(-1)
+        L.getField(1, "__twineId")
+        val id = L.checkString(-1)
         L.pop(1)
 
         L.getField(1, "__twineEnv")
@@ -94,9 +85,8 @@ class TwineEngine(
         L.pop(1)
 
         val env = environments[environment] ?: return@wrap 0
-        val native = env.registry[instanceKey] ?: return@wrap 0
-        val classModel = env.registry.getClassModel(instanceKey) ?: return@wrap 0
-
+        val native = resolveNative(env, id) ?: return@wrap 0
+        val classModel = resolveClassModel(env, id) ?: return@wrap 0
         handleCall(L, env, native, classModel, key)
     }, "__call")
 
@@ -105,12 +95,14 @@ class TwineEngine(
         env: TwineEnvironment,
         native: TwineNative,
         classModel: ClassModel,
+        id: String,
         key: String
     ): Int {
         val funcs = classModel.functions.filter { it.key == key }
         if (funcs.isNotEmpty()) {
             L.newTable()
-            pushTwineInfo(L, native, env)
+            pushTwineInfo(L, id, key, env)
+
             L.pushString(key)
             L.setField(-2, "__twineFunc")
 
@@ -121,42 +113,39 @@ class TwineEngine(
             return 1
         }
 
-        val prop = classModel.propertyList.find { it.name == key }
+        val prop = classModel.properties[key]
         if (prop != null) {
             val value = prop.get(native)
-            LuaValueWriter.push(
-                L,
-                value,
-                this,
-                env
-            )
+//            println("GOT $value")
+            LuaValueWriter.push(L, value, this, env)
             return 1
         }
+
         return 0
     }
 
     fun handleNewIndex(
         L: LuaState,
+        env: TwineEnvironment,
         native: TwineNative,
-        classModel: ClassModel
+        classModel: ClassModel,
+        key: String
     ): Int {
-        val key = L.checkString(2)
-        val prop = classModel.properties[key]
-            ?: throw TwineError("Unknown property '$key'")
-
+        val prop = classModel.properties[key] ?: return 0
+//        println("__NEWINDEX: ${L.checkString(2)} = ${L.toString(3)}")
         if (!prop.mutable) {
-            throw TwineError("Property '$key' is read-only")
+            throw TwineException("Property '$key' is read-only")
         }
 
         val value = LuaValueReader.read(
-            L,
-            3,
-            prop.klass,
-            context,
-            globalEnvironment
+            L, 3, prop.klass, context, env
         )
 
+//        println("BEFORE SET: ${prop.get(native)}")
+//        println("SETTING: $value")
         prop.set(native, value)
+//        println("AFTER SET: ${prop.get(native)}")
+
         return 0
     }
 
@@ -178,17 +167,32 @@ class TwineEngine(
         )
         val offset = OverloadResolver.offset(L, native)
 //        println("CANDIDATE: $candidate | $offset")
-
         val argCount = L.top() - 1 - offset
-        val args = Array(argCount) { i ->
+        val args = Array(candidate.params.size) { i ->
             val param = candidate.params[i]
-            LuaValueReader.read(
-                L,
-                i + 2 + offset,
-                param.klass,
-                context,
-                env
-            )
+
+            if (param.isVararg) {
+                val start = i + 2 + offset
+                val count = argCount - i
+
+                Array(count) { j ->
+                    LuaValueReader.read(
+                        L,
+                        start + j,
+                        param.elementClass,
+                        context,
+                        env
+                    )
+                }
+            } else {
+                LuaValueReader.read(
+                    L,
+                    i + 2 + offset,
+                    param.klass,
+                    context,
+                    env
+                )
+            }
         }
 
         val result = candidate.call(native, args)
@@ -207,11 +211,19 @@ class TwineEngine(
         env: TwineEnvironment = globalEnvironment,
         name: String = "main.luau"
     ) {
-        val bytecode = LuauCompiler.DEFAULT.compile(script)
+        val compiler = LuauCompiler.builder()
+            .optimizationLevel(OptimizationLevel.MAXIMUM)
+            .debugLevel(DebugLevel.NONE)
+            .mutableGlobals(
+                (env.registry.allKeys() + globalEnvironment.registry.allKeys())
+                    .toList()
+            )
+            .build()
+        val bytecode = compiler.compile(script)
 
         val thread = state.newThread()
         environments[env.uuid.toString()] = env
-        pushNatives(env)
+        pushNatives(thread, env)
         thread.sandboxThread()
 
         thread.load(name, bytecode)
@@ -220,32 +232,36 @@ class TwineEngine(
         state.pop(1)
     }
 
-    private fun pushNatives(env: TwineEnvironment) {
+    private fun pushNatives(thread: LuaState, env: TwineEnvironment) {
         env.registry.all().forEach {
-            pushNative(state, it, env)
-            state.setGlobal(it.resolvedName)
+            pushNative(thread, it, env)
+            thread.setGlobal(it.resolvedName)
         }
     }
 
-    fun pushTwineInfo(L: LuaState, native: TwineNative, env: TwineEnvironment) {
-        L.pushString(native.resolvedName)
+    fun pushTwineInfo(L: LuaState, id: String, name: String, env: TwineEnvironment) {
+        L.pushString(id)
+        L.setField(-2, "__twineId")
+        L.pushString(name)
         L.setField(-2, "__twineName")
+
         L.pushString(env.uuid.toString())
         L.setField(-2, "__twineEnv")
     }
 
     fun pushNative(L: LuaState, native: TwineNative, env: TwineEnvironment) {
-        L.newTable()
-        pushTwineInfo(L, native, env)
+        val id = env.registry.findKey(native)
+            ?: env.runtimeRegistry.findKey(native)
+            ?: env.runtimeRegistry.addRuntime(native)
 
         L.newTable()
+        pushTwineInfo(L, id, native.resolvedName, env)
 
+        L.newTable()
         L.pushFunction(SHARED_INDEX_FUNC)
         L.setField(-2, "__index")
-
         L.pushFunction(SHARED_NEWINDEX_FUNC)
         L.setField(-2, "__newindex")
-
         L.setMetaTable(-2)
     }
 }
