@@ -225,8 +225,8 @@ class TwineEngine(
 
         val thread = state.newThread()
         environments[env.uuid.toString()] = env
-        pushNatives(thread, env)
         thread.sandboxThread()
+        pushNatives(thread, env)
 
         thread.load(name, bytecode)
         thread.call(0, 0)
