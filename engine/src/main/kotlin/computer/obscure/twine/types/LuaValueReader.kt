@@ -2,8 +2,8 @@
 package computer.obscure.twine.types
 
 import computer.obscure.twine.TwineNative
+import computer.obscure.twine.callbacks.LuaCallback
 import computer.obscure.twine.engine.TwineContext
-import computer.obscure.twine.exceptions.TwineException
 import computer.obscure.twine.natives.TwineEnvironment
 import net.hollowcube.luau.LuaState
 
@@ -151,30 +151,17 @@ object LuaValueReader {
         val engine = context.engine
         val state = engine.state
 
-        fun callLua(vararg args: Any?): Any? {
+        fun callLua(args: Array<out Any?>): Any? {
             state.getRef(ref)
             args.forEach { LuaValueWriter.push(state, it, engine, env) }
             state.call(args.size, 1)
             val result = if (returnClass == Unit::class.java || returnClass == Void.TYPE)
                 Unit
-            else
-                read(state, -1, returnClass, context, env)
+            else read(state, -1, returnClass, context, env)
             state.pop(1)
             return result
         }
 
-        // this is rotten
-        val f0: () -> Any? = { callLua() }
-        val f1: (Any?) -> Any? = { a -> callLua(a) }
-        val f2: (Any?, Any?) -> Any? = { a, b -> callLua(a, b) }
-        val f3: (Any?, Any?, Any?) -> Any? = { a, b, c -> callLua(a, b, c) }
-
-        return when (type) {
-            Function0::class.java -> f0
-            Function1::class.java -> f1
-            Function2::class.java -> f2
-            Function3::class.java -> f3
-            else -> throw TwineException("Unsupported function arity: ${type.name}")
-        }
+        return LuaCallback(::callLua)
     }
 }

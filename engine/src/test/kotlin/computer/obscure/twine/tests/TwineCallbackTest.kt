@@ -253,15 +253,6 @@ class TwineCallbackTest {
     }
 
     @Test
-    fun `a callback with too many parameters is rejected`() {
-        h.register(object : TwineNative("t") {
-            @TwineFunction fun big(f: (Int, Int, Int, Int) -> Int) = f(1, 2, 3, 4)
-        })
-        val failure = h.failure("t.big(function(a, b, c, d) return a end)")
-        assertTrue(failure.fullMessage().contains("arity"), failure.fullMessage())
-    }
-
-    @Test
     fun `an error inside a callback fails the script`() {
         h.register(object : TwineNative("t") {
             @TwineFunction fun call0(f: () -> String) = f()
