@@ -28,22 +28,29 @@ class ParamSpec(
     val isVararg: Boolean,
     val elementType: KType?,
     val elementClass: Class<*>?,
+    val functionReturnClass: Class<*>? = null,
 )
 
 class BoundFunction(val name: String, val function: KFunction<*>) {
     val params: Array<ParamSpec> = function.parameters.drop(1).map { p ->
         val t = p.type
         val el = if (p.isVararg) t.arguments.firstOrNull()?.type else null
+        val klass = (t.classifier as? KClass<*>)?.javaObjectType
+
+        val fnReturn = if (klass != null && Function::class.java.isAssignableFrom(klass)) {
+            (t.arguments.lastOrNull()?.type?.classifier as? KClass<*>)?.javaObjectType
+        } else null
 
         ParamSpec(
             name = p.name,
             type = t,
-            klass = (t.classifier as? KClass<*>)?.javaObjectType,
+            klass = klass,
             nullable = t.isMarkedNullable,
             optional = p.isOptional,
             isVararg = p.isVararg,
             elementType = el,
-            elementClass = (el?.classifier as? KClass<*>)?.javaObjectType
+            elementClass = (el?.classifier as? KClass<*>)?.javaObjectType,
+            functionReturnClass = fnReturn
         )
     }.toTypedArray()
 

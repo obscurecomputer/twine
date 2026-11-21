@@ -181,7 +181,8 @@ class TwineEngine(
                         start + j,
                         param.elementClass,
                         context,
-                        env
+                        env,
+                        param.functionReturnClass
                     )
                 }
             } else {
@@ -190,7 +191,8 @@ class TwineEngine(
                     i + 2 + offset,
                     param.klass,
                     context,
-                    env
+                    env,
+                    param.functionReturnClass
                 )
             }
         }
@@ -213,10 +215,10 @@ class TwineEngine(
     ) {
         val compiler = LuauCompiler.builder()
             .optimizationLevel(OptimizationLevel.MAXIMUM)
-            .debugLevel(DebugLevel.NONE)
+//            .debugLevel(DebugLevel.NONE)
             .mutableGlobals(
-                (env.registry.allKeys() + globalEnvironment.registry.allKeys())
-                    .toList()
+                (env.registry.all() + globalEnvironment.registry.all())
+                    .toList().map { it.resolvedName }
             )
             .build()
         val bytecode = compiler.compile(script)
@@ -281,6 +283,11 @@ fun main() {
             println("hello integer")
             return "RETURN STRING!!"
         }
+
+        @TwineFunction
+        fun callback(test: (String) -> Boolean): Boolean {
+            return test.invoke("test string")
+        }
     }
 
     val env = TwineEnvironment()
@@ -290,10 +297,15 @@ fun main() {
     val context = TwineContext()
     context.engine.run(
         """
-            print(testobj.hello("hiahahah"))
-            print(testobj.hello(67))
-            print(testobj.hello(testobj, 67))
-            print(testobj:hello(67))
+            print(
+                testobj.callback(function(str)
+                    if str == "test string" then
+                        return true
+                    end
+                  
+                    return false
+                end)
+            )
         """.trimIndent(),
         env
     )

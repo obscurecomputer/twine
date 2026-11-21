@@ -29,6 +29,9 @@ object LuaTypeChecker {
         val luaType = state.type(index)
         val number = luaType == LuaType.NUMBER || luaType == LuaType.INTEGER
 
+        if (Function::class.java.isAssignableFrom(type)) {
+            return luaType == LuaType.FUNCTION
+        }
         return when (type) {
             Any::class.java -> true
             String::class.java -> luaType == LuaType.STRING
@@ -91,7 +94,6 @@ object LuaTypeChecker {
             }
 
             val nullable = param.nullable
-
             if (!matches(state, i + 2 + offset, type, nullable)) {
                 return false
             }

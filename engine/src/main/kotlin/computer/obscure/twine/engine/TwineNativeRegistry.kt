@@ -2,13 +2,12 @@ package computer.obscure.twine.engine
 
 import computer.obscure.twine.TwineNative
 import computer.obscure.twine.natives.ClassModel
-import java.util.UUID
 import kotlin.random.Random
 
 class TwineNativeRegistry {
     private val natives = mutableMapOf<String, Pair<TwineNative, ClassModel>>()
 
-    private var nextId = Random.Default.nextLong()
+    private var nextId = Random.nextLong()
 
     fun generateId(): String =
         (nextId++).toULong().toString(36)

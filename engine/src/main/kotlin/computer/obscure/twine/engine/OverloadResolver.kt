@@ -1,11 +1,8 @@
 package computer.obscure.twine.engine
 
-import computer.obscure.twine.exceptions.TwineException
-import computer.obscure.twine.TwineLogger
 import computer.obscure.twine.TwineNative
 import computer.obscure.twine.exceptions.TwineOverloadException
 import computer.obscure.twine.natives.BoundFunction
-import computer.obscure.twine.natives.TwineEnvironment
 import computer.obscure.twine.types.LuaTypeChecker
 import net.hollowcube.luau.LuaState
 
@@ -30,8 +27,6 @@ object OverloadResolver {
         val argCount = L.top() - 1 - offset
 
         val matching = candidates.filter { it.accepts(argCount) }
-
-        TwineLogger.debug("MATCHING: $matching")
 
         return matching.firstOrNull { func ->
             LuaTypeChecker.matches(L, func, argCount, offset)

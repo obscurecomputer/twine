@@ -1,10 +1,11 @@
-package computer.obscure.twine
+package computer.obscure.twine.tests
 
+import computer.obscure.twine.TwineHarness
+import computer.obscure.twine.TwineNative
 import computer.obscure.twine.annotations.TwineFunction
 import computer.obscure.twine.annotations.TwineProperty
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.util.logging.Level
 import kotlin.test.assertEquals
 
 class TwinePropertyTest {
@@ -159,7 +160,6 @@ class TwinePropertyTest {
             capture.record(tostring(t.count))
             t.bump()
             t.bump()
-            print(t.count)
             capture.record(tostring(t.count))
         """)
         assertEquals(listOf("0", "2"), h.output)

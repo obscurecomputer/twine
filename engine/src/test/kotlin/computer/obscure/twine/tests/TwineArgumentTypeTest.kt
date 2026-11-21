@@ -1,5 +1,7 @@
-package computer.obscure.twine
+package computer.obscure.twine.tests
 
+import computer.obscure.twine.TwineHarness
+import computer.obscure.twine.TwineNative
 import computer.obscure.twine.annotations.TwineFunction
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
