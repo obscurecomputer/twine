@@ -87,7 +87,6 @@ class TwineEnvironmentTest {
         try {
             context.engine.run("capture.record(onlyFirst.value())", second)
         } catch (e: Throwable) {
-            e.printStackTrace()
             leaked = false
         }
 
