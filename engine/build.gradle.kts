@@ -20,13 +20,12 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("com.google.guava:guava:33.2.1-jre")
 
-    // TODO: DO NOT KEEP THIS AS IMPL
-    implementation("dev.hollowcube:luau:$luauVersion")
+    compileOnly("dev.hollowcube:luau:$luauVersion")
     testImplementation("dev.hollowcube:luau:$luauVersion")
 
     listOf("windows-x64", "linux-x64", "macos-arm64", "macos-x64").forEach { platform ->
         val natives = "dev.hollowcube:luau-natives-$platform:$luauNativeVersion"
-        implementation(natives)
+        compileOnly(natives)
         testRuntimeOnly(natives)
     }
 }

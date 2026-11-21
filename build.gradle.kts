@@ -6,7 +6,7 @@ plugins {
 
 allprojects {
     group = "computer.obscure.twine"
-    version = "3.1.9"
+    version = "4.0.0"
 
     repositories {
         mavenLocal()
