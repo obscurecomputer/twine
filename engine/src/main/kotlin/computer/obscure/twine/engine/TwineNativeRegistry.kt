@@ -2,16 +2,20 @@ package computer.obscure.twine.engine
 
 import computer.obscure.twine.TwineNative
 import computer.obscure.twine.natives.ClassModel
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 import kotlin.text.toString
 
 class TwineNativeRegistry {
     private val natives = mutableMapOf<String, Pair<TwineNative, ClassModel>>()
 
-    private var nextId = Random.nextLong()
+    private val nextId = AtomicLong(Random.nextLong())
 
-    fun generateId(): Long =
-        (nextId++)
+    fun generateId(): Long = nextId.getAndIncrement()
+
+    fun remove(key: String) {
+        natives.remove(key)
+    }
 
     fun add(native: TwineNative) {
         val id = generateId()

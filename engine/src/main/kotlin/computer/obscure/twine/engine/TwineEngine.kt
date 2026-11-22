@@ -16,6 +16,7 @@ import java.lang.foreign.Arena
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 
+
 /**
  * The main entry point for the Twine Luau integration.
  * This class manages the Luau VM lifecycle, registration of Kotlin natives,
@@ -23,13 +24,17 @@ import java.lang.foreign.ValueLayout
  *
  * Provides an intuitive engine abstracting most of the functionality of Twine.
  */
-
 class TwineEngine(
     val context: TwineContext
 ) {
+    private class RuntimeRef(val registry: TwineNativeRegistry, val key: String) {
+        var count = 0
+    }
+
     val state = LuaState.newState()
     val globalEnvironment = TwineEnvironment()
     val environments = mutableMapOf<String, TwineEnvironment>()
+    private val runtimeRefs = HashMap<Long, RuntimeRef>()
 
     val lock = Any()
 
@@ -121,7 +126,13 @@ class TwineEngine(
         { ptr ->
             try {
                 val id = ptr.reinterpret(8).get(ValueLayout.JAVA_LONG, 0)
-                println(id)
+                synchronized(lock) {
+                    val ref = runtimeRefs[id] ?: return@synchronized
+                    if (--ref.count <= 0) {
+                        runtimeRefs.remove(id)
+                        ref.registry.remove(ref.key)
+                    }
+                }
             } catch (t: Throwable) {
                 t.printStackTrace()
             }
@@ -137,8 +148,8 @@ class TwineEngine(
         id: String,
         key: String
     ): Int {
-        val funcs = classModel.functions.filter { it.key == key }
-        if (funcs.isNotEmpty()) {
+        val funcs = classModel.functions[key]
+        if (funcs != null) {
             L.newTable()
             pushTwineInfo(L, id, native, env)
 
@@ -149,6 +160,9 @@ class TwineEngine(
             L.pushFunction(SHARED_CALL_FUNC)
             L.setField(-2, "__call")
             L.setMetaTable(-2)
+            L.pushString(key)
+            L.pushValue(-2)
+            L.rawSet(1)
             return 1
         }
 
@@ -267,7 +281,7 @@ class TwineEngine(
         val bytecode = compile(script, env)
 
         val thread = state.newThread()
-        environments[env.uuid.toString()] = env
+        environments[env.uuid] = env
         thread.sandboxThread()
         pushNatives(thread, env)
         enableRequire(thread, env)
@@ -333,8 +347,7 @@ class TwineEngine(
         L.setField(-2, "__twineId")
         L.pushString(native.resolvedName)
         L.setField(-2, "__twineName")
-
-        L.pushString(env.uuid.toString())
+        L.pushString(env.uuid)
         L.setField(-2, "__twineEnv")
     }
 
@@ -345,18 +358,37 @@ class TwineEngine(
             ?: env.runtimeRegistry.findKey(native)
             ?: env.runtimeRegistry.addRuntime(native)
 
+        if (id.startsWith("runtime:")) {
+            synchronized(lock) {
+                runtimeRefs
+                    .getOrPut(native.internalIdLong!!) { RuntimeRef(env.runtimeRegistry, id) }
+                    .count++
+            }
+        }
+
         L.newTable()
         pushTwineInfo(L, id, native, env)
 
-        L.newTable()
-        L.pushFunction(SHARED_INDEX_FUNC)
-        L.setField(-2, "__index")
-        L.pushFunction(SHARED_NEWINDEX_FUNC)
-        L.setField(-2, "__newindex")
         val block = luaujava_h.luaW_newuserdatadtor(L.L(), 8L, dtorStub).reinterpret(8)
         block.set(ValueLayout.JAVA_LONG, 0, native.internalIdLong!!)
 
         L.setField(-2, "__gcsentinel")
+
+        L.getRef(metaRef)
         L.setMetaTable(-2)
+    }
+
+    private val metaRef: Int = run {
+        state.newTable()
+
+        state.pushFunction(SHARED_INDEX_FUNC)
+        state.setField(-2, "__index")
+
+        state.pushFunction(SHARED_NEWINDEX_FUNC)
+        state.setField(-2, "__newindex")
+
+        state.ref(-1).also {
+            state.pop(1)
+        }
     }
 }
