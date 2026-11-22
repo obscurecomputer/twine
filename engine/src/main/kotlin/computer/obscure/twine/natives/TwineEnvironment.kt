@@ -8,4 +8,6 @@ class TwineEnvironment {
 
     val registry = TwineNativeRegistry()
     val runtimeRegistry = TwineNativeRegistry()
+
+    var moduleLoader: ((name: String) -> String?)? = null
 }

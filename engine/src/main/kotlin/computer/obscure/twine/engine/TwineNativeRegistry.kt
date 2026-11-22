@@ -3,26 +3,31 @@ package computer.obscure.twine.engine
 import computer.obscure.twine.TwineNative
 import computer.obscure.twine.natives.ClassModel
 import kotlin.random.Random
+import kotlin.text.toString
 
 class TwineNativeRegistry {
     private val natives = mutableMapOf<String, Pair<TwineNative, ClassModel>>()
 
     private var nextId = Random.nextLong()
 
-    fun generateId(): String =
-        (nextId++).toULong().toString(36)
+    fun generateId(): Long =
+        (nextId++)
 
     fun add(native: TwineNative) {
-        val key = "prerun:${generateId()}"
+        val id = generateId()
+        val key = "prerun:${id.toString(36)}"
         native.internalId = key
+        native.internalIdLong = id
         natives[key] = native to ClassModel.of(native)
     }
 
     fun addRuntime(native: TwineNative): String {
         findKey(native)?.let { return it }
 
-        val key = "runtime:${generateId()}"
+        val id = generateId()
+        val key = "runtime:${id.toString(36)}"
         native.internalId = key
+        native.internalIdLong = id
         natives[key] = native to ClassModel.of(native)
         return key
     }

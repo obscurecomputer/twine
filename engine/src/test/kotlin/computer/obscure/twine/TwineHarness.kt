@@ -16,9 +16,13 @@ class TwineHarness {
     val output = mutableListOf<String>()
     val env = TwineEnvironment()
     val context = TwineContext()
+    private val modules = mutableMapOf<String, String>()
+    fun module(name: String, source: String) { modules[name] = source }
 
     init {
         register(Capture(output))
+
+        context.moduleLoader = { name -> modules[name] }
     }
 
     fun register(native: TwineNative) {

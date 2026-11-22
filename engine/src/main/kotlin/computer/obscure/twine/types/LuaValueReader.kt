@@ -94,6 +94,7 @@ object LuaValueReader {
 
         return environment.registry[id]
             ?: environment.runtimeRegistry[id]
+            ?: context.engine.globalEnvironment.registry[id]
             ?: context.registry[id]
             ?: error("No native registered with ID '$id'")
     }
@@ -131,7 +132,9 @@ object LuaValueReader {
             state.isBoolean(index) -> state.toBoolean(index)
             state.isNumber(index) -> state.checkNumber(index)
             state.isString(index) -> state.checkString(index)
-            state.isTable(index) -> readTable(state, index, context, environment)
+            state.isTable(index) ->
+                if (isNativeTable(state, index)) readNative(state, index, context, environment)
+                else readTable(state, index, context, environment)
             else -> state.checkString(index)
         }
     }

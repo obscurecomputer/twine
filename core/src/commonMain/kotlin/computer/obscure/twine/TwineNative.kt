@@ -23,6 +23,7 @@ open class TwineNative(
         get() = valueName.ifEmpty { this::class.simpleName!!.lowercase() }
 
     var internalId: String? = null
+    var internalIdLong: Long? = null
 
     companion object {
         /**
